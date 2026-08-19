@@ -1,0 +1,45 @@
+// MirrorPin 算法内核（M0）公共出口
+
+export { MARD291, type MardSwatch } from './palettes/mard291';
+
+export type { RGB, RgbaImage, Swatch, Cell, Grid } from './core/types';
+
+export {
+  srgbToOklab,
+  oklabDistance,
+  hexToRgb,
+  rgbToHex,
+  type Oklab,
+} from './core/color';
+export { sampleGrid, type SampleMode } from './core/grid';
+export { buildPalette, nearestSwatch, type PaletteEntry } from './core/palette';
+export { kmeansPalette, mulberry32 } from './core/quantize';
+export { mergeRegions, removeBackground } from './core/post';
+export {
+  generatePattern,
+  generatePatternMapFirst,
+  generatePatternAdvanced,
+  generatePatternSoft,
+  type GenerateOptions,
+  type MapFirstOptions,
+  type AdvancedOptions,
+  type SoftOptions,
+} from './core/pipeline';
+export { boxBlur, gaussianBlur } from './core/preprocess';
+export { estimateBackground, computeBBox, cropSquare, type BBox, type BackgroundEstimate } from './core/subject';
+export {
+  generatePatternBead,
+  buildBeadPalette,
+  toGrid,
+  cropToSubject,
+  cropToAspectAligned,
+  floodRemoveBg,
+  matchDirectData,
+  matchDitherData,
+  despeckle,
+  limitColorsIdx,
+  type BeadOptions,
+  type GridRgba,
+} from './beadpattern/core';
+export { srgbToLab, ciede2000, type Lab } from './beadpattern/ciede2000';
+export { renderPatternImage, type RenderPatternOptions } from './render/pattern';
