@@ -4,6 +4,7 @@
 import sharp from 'sharp';
 import type { Grid } from '../core/types';
 import { hexToRgb } from '../core/color';
+import { countGridMaterials, type MaterialRow } from '../core/materials';
 
 export interface RenderNodeOptions {
   /** 每格边长（px），默认 40 */
@@ -26,26 +27,8 @@ export interface RenderNodeOptions {
   paletteName?: string;
 }
 
-/** 材料清单行：色号 + 色值 + 用量 */
-export interface MaterialRow {
-  code: string;
-  hex: string;
-  count: number;
-}
-
-/** 统计网格内各色号用量，按用量降序（同量按色号升序） */
-export function countGridMaterials(grid: Grid): MaterialRow[] {
-  const m = new Map<string, MaterialRow>();
-  for (const row of grid.cells) {
-    for (const c of row) {
-      if (c.external || !c.code) continue;
-      const e = m.get(c.code);
-      if (e) e.count++;
-      else m.set(c.code, { code: c.code, hex: c.hex, count: 1 });
-    }
-  }
-  return [...m.values()].sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
-}
+// countGridMaterials / MaterialRow 已迁至 core/materials.ts（无 sharp 依赖，浏览器可用）
+export { countGridMaterials, type MaterialRow } from '../core/materials';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

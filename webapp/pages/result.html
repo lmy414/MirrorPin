@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图纸结果 · MirrorPin 拼豆图纸生成器</title>
+    <style id="theme-vars">
+:root {
+  --brand-prefix: "mirrorpin";
+
+  /* Primary hue: warm coral */
+  --mirrorpin-primary: #E85D4C;
+  --mirrorpin-primary-50: #FEF2F0;
+  --mirrorpin-primary-100: #FCE5E2;
+  --mirrorpin-primary-200: #F9C9C3;
+  --mirrorpin-primary-300: #F2A199;
+  --mirrorpin-primary-400: #E85D4C;
+  --mirrorpin-primary-500: #D1483E;
+  --mirrorpin-primary-600: #B33A32;
+  --mirrorpin-primary-700: #942F29;
+
+  /* Neutral surfaces */
+  --mirrorpin-background: #FAFAF8;
+  --mirrorpin-foreground: #1F1F1F;
+  --mirrorpin-card: #FFFFFF;
+  --mirrorpin-card-foreground: #1F1F1F;
+  --mirrorpin-popover: #FFFFFF;
+  --mirrorpin-popover-foreground: #1F1F1F;
+
+  /* Muted / secondary text */
+  --mirrorpin-muted: #F2F2EF;
+  --mirrorpin-muted-foreground: #6B6B6B;
+
+  /* Borders and input */
+  --mirrorpin-border: #E5E5E0;
+  --mirrorpin-input: #E5E5E0;
+  --mirrorpin-ring: #E85D4C;
+
+  /* Primary foreground */
+  --mirrorpin-primary-foreground: #FFFFFF;
+
+  /* State colors */
+  --mirrorpin-state-success: #2A9D58;
+  --mirrorpin-state-warning: #D9781E;
+  --mirrorpin-state-error: #DC2626;
+  --mirrorpin-state-info: #2563EB;
+
+  /* Radius scale */
+  --mirrorpin-radius-xs: 2px;
+  --mirrorpin-radius-sm: 4px;
+  --mirrorpin-radius-md: 8px;
+  --mirrorpin-radius-lg: 16px;
+  --mirrorpin-radius-pill: 999px;
+
+  /* Typography */
+  --mirrorpin-font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mirrorpin-font-mono: "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+
+  /* Semantic aliases expected by head contract */
+  --background: var(--mirrorpin-background);
+  --foreground: var(--mirrorpin-foreground);
+  --card: var(--mirrorpin-card);
+  --card-foreground: var(--mirrorpin-card-foreground);
+  --popover: var(--mirrorpin-popover);
+  --popover-foreground: var(--mirrorpin-popover-foreground);
+  --primary: var(--mirrorpin-primary);
+  --primary-foreground: var(--mirrorpin-primary-foreground);
+  --muted: var(--mirrorpin-muted);
+  --muted-foreground: var(--mirrorpin-muted-foreground);
+  --border: var(--mirrorpin-border);
+  --input: var(--mirrorpin-input);
+  --ring: var(--mirrorpin-ring);
+  --radius-sm: var(--mirrorpin-radius-sm);
+  --radius-md: var(--mirrorpin-radius-md);
+  --radius-lg: var(--mirrorpin-radius-lg);
+}
+
+html {
+  font-family: var(--mirrorpin-font-sans);
+  background: var(--mirrorpin-background);
+  color: var(--mirrorpin-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mirrorpin-heading {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.mirrorpin-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--mirrorpin-muted-foreground);
+}
+
+.mirrorpin-mono {
+  font-family: var(--mirrorpin-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--mirrorpin-background);
+    --color-foreground: var(--mirrorpin-foreground);
+    --color-card: var(--mirrorpin-card);
+    --color-card-foreground: var(--mirrorpin-card-foreground);
+    --color-popover: var(--mirrorpin-popover);
+    --color-popover-foreground: var(--mirrorpin-popover-foreground);
+    --color-primary: var(--mirrorpin-primary);
+    --color-primary-foreground: var(--mirrorpin-primary-foreground);
+    --color-muted: var(--mirrorpin-muted);
+    --color-muted-foreground: var(--mirrorpin-muted-foreground);
+    --color-border: var(--mirrorpin-border);
+    --color-input: var(--mirrorpin-input);
+    --color-ring: var(--mirrorpin-ring);
+    --radius-sm: var(--mirrorpin-radius-sm);
+    --radius-md: var(--mirrorpin-radius-md);
+    --radius-lg: var(--mirrorpin-radius-lg);
+  }
+  @layer base {
+    body { background: var(--mirrorpin-background); color: var(--mirrorpin-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--mirrorpin-background); }
+      .text-background { color: var(--mirrorpin-background); }
+      .border-background { border-color: var(--mirrorpin-background); }
+      .ring-background { --tw-ring-color: var(--mirrorpin-background); }
+      .bg-foreground { background-color: var(--mirrorpin-foreground); }
+      .text-foreground { color: var(--mirrorpin-foreground); }
+      .border-foreground { border-color: var(--mirrorpin-foreground); }
+      .ring-foreground { --tw-ring-color: var(--mirrorpin-foreground); }
+      .bg-card { background-color: var(--mirrorpin-card); }
+      .text-card { color: var(--mirrorpin-card); }
+      .border-card { border-color: var(--mirrorpin-card); }
+      .ring-card { --tw-ring-color: var(--mirrorpin-card); }
+      .bg-card-foreground { background-color: var(--mirrorpin-card-foreground); }
+      .text-card-foreground { color: var(--mirrorpin-card-foreground); }
+      .border-card-foreground { border-color: var(--mirrorpin-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--mirrorpin-card-foreground); }
+      .bg-popover { background-color: var(--mirrorpin-popover); }
+      .text-popover { color: var(--mirrorpin-popover); }
+      .border-popover { border-color: var(--mirrorpin-popover); }
+      .ring-popover { --tw-ring-color: var(--mirrorpin-popover); }
+      .bg-popover-foreground { background-color: var(--mirrorpin-popover-foreground); }
+      .text-popover-foreground { color: var(--mirrorpin-popover-foreground); }
+      .border-popover-foreground { border-color: var(--mirrorpin-popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--mirrorpin-popover-foreground); }
+      .bg-primary { background-color: var(--mirrorpin-primary); }
+      .text-primary { color: var(--mirrorpin-primary); }
+      .border-primary { border-color: var(--mirrorpin-primary); }
+      .ring-primary { --tw-ring-color: var(--mirrorpin-primary); }
+      .bg-primary-foreground { background-color: var(--mirrorpin-primary-foreground); }
+      .text-primary-foreground { color: var(--mirrorpin-primary-foreground); }
+      .border-primary-foreground { border-color: var(--mirrorpin-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--mirrorpin-primary-foreground); }
+      .bg-muted { background-color: var(--mirrorpin-muted); }
+      .text-muted { color: var(--mirrorpin-muted); }
+      .border-muted { border-color: var(--mirrorpin-muted); }
+      .ring-muted { --tw-ring-color: var(--mirrorpin-muted); }
+      .bg-muted-foreground { background-color: var(--mirrorpin-muted-foreground); }
+      .text-muted-foreground { color: var(--mirrorpin-muted-foreground); }
+      .border-muted-foreground { border-color: var(--mirrorpin-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--mirrorpin-muted-foreground); }
+      .bg-border { background-color: var(--mirrorpin-border); }
+      .text-border { color: var(--mirrorpin-border); }
+      .border-border { border-color: var(--mirrorpin-border); }
+      .ring-border { --tw-ring-color: var(--mirrorpin-border); }
+      .bg-input { background-color: var(--mirrorpin-input); }
+      .text-input { color: var(--mirrorpin-input); }
+      .border-input { border-color: var(--mirrorpin-input); }
+      .ring-input { --tw-ring-color: var(--mirrorpin-input); }
+      .bg-ring { background-color: var(--mirrorpin-ring); }
+      .text-ring { color: var(--mirrorpin-ring); }
+      .border-ring { border-color: var(--mirrorpin-ring); }
+      .ring-ring { --tw-ring-color: var(--mirrorpin-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased flex flex-col">
+  <div id="top" class="sr-only" aria-hidden="true">top</div>
+
+  <header class="sticky top-0 z-50 w-full border-b border-border bg-card/80 backdrop-blur">
+    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+      <a href="./index.html" class="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground">
+        <i data-lucide="grid-3x3" class="h-5 w-5 text-primary"></i>
+        MirrorPin
+      </a>
+      <a href="https://github.com/MirrorPin" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors">
+        <i data-lucide="github" class="h-5 w-5"></i>
+      </a>
+    </div>
+  </header>
+
+  <main class="flex-1 w-full">
+    <div class="mx-auto max-w-6xl px-6 py-10 space-y-8">
+
+      <section data-region="info-bar">
+        <div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <i data-lucide="info" class="h-4 w-4 text-primary"></i>
+            <span class="mirrorpin-mono font-medium text-foreground">78 × 78</span>
+            <span>格</span>
+            <span class="text-border">·</span>
+            <span class="mirrorpin-mono font-medium text-foreground">42</span>
+            <span>色</span>
+            <span class="text-border">·</span>
+            <span>合计</span>
+            <span class="mirrorpin-mono font-medium text-foreground">6,084</span>
+            <span>豆</span>
+            <span class="text-border">·</span>
+            <span>色卡</span>
+            <span class="font-medium text-foreground">MARD 221</span>
+          </p>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+        <section data-region="pattern-preview" id="pattern-preview" class="space-y-3">
+          <div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h2 class="mirrorpin-heading text-lg text-foreground">图纸预览</h2>
+              <span class="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">cell 40 · board 29</span>
+            </div>
+            <div class="overflow-auto rounded-lg border border-border bg-muted/50 p-4">
+              <div class="flex min-w-[320px] justify-center">
+                <svg viewBox="0 0 16 16" class="h-80 w-80" style="shape-rendering:crispEdges" aria-label="拼豆图纸预览">
+                  <rect x="0" y="0" width="16" height="16" fill="var(--mirrorpin-background)"/>
+                  <rect x="2" y="1" width="12" height="3" fill="#3D3D3D"/>
+                  <rect x="2" y="4" width="1" height="4" fill="#3D3D3D"/>
+                  <rect x="13" y="4" width="1" height="4" fill="#3D3D3D"/>
+                  <rect x="4" y="2" width="2" height="1" fill="#FFF8F0"/>
+                  <rect x="3" y="4" width="10" height="9" fill="#F5D0C5"/>
+                  <rect x="5" y="7" width="1" height="1" fill="#2C2C2C"/>
+                  <rect x="10" y="7" width="1" height="1" fill="#2C2C2C"/>
+                  <rect x="4" y="9" width="1" height="1" fill="#F4A6A0"/>
+                  <rect x="11" y="9" width="1" height="1" fill="#F4A6A0"/>
+                  <rect x="6" y="11" width="4" height="1" fill="#E85D4C"/>
+                  <rect x="2" y="13" width="12" height="2" fill="#4AA3A2"/>
+                  <path d="M5,0 V16 M10,0 V16 M15,0 V16 M0,5 H16 M0,10 H16 M0,15 H16" stroke="var(--mirrorpin-border)" stroke-width="0.04" vector-effect="non-scaling-stroke"/>
+                </svg>
+              </div>
+            </div>
+            <p class="mt-3 text-center text-xs text-muted-foreground">图纸预览 · cell 40 · board 29</p>
+          </div>
+        </section>
+
+        <section data-region="material-list" id="material-list" class="space-y-3">
+          <div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <h2 class="mirrorpin-heading text-lg text-foreground mb-4">材料清单</h2>
+            <div class="overflow-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-border text-left text-muted-foreground">
+                    <th class="pb-2 font-medium">色号</th>
+                    <th class="pb-2 font-medium">色样</th>
+                    <th class="pb-2 font-medium text-right">豆数</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border text-foreground">
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A01</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#2C2C2C"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">1,248</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A02</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#FFF8F0"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">1,024</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A17</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#E85D4C"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">896</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A33</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#F4A6A0"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">704</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A45</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#4AA3A2"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">576</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A58</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#F2C94C"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">448</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A63</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#8C8C8C"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">384</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A71</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#F5E6D3"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">320</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A89</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#7CB342"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">256</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2.5 font-medium">MARD A99</td>
+                    <td class="py-2.5"><span class="inline-block h-5 w-5 rounded-sm border border-border" style="background-color:#5D4037"></span></td>
+                    <td class="py-2.5 text-right mirrorpin-mono">228</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr class="border-t-2 border-border">
+                    <td class="pt-3 font-medium text-foreground" colspan="2">合计</td>
+                    <td class="pt-3 text-right mirrorpin-mono font-semibold text-foreground">6,084</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <section data-region="download-actions" class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        <button id="download-png" type="button" class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <i data-lucide="download" class="h-5 w-5"></i>
+          下载图纸 PNG
+        </button>
+        <button id="download-csv" type="button" class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <i data-lucide="file-spreadsheet" class="h-5 w-5"></i>
+          下载清单 CSV
+        </button>
+        <a id="back-to-edit" data-dom-id="back-to-edit" href="./index.html" class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg border border-border bg-card px-6 py-3 text-base font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:ml-2">
+          <i data-lucide="arrow-left" class="h-5 w-5"></i>
+          返回修改参数
+        </a>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="mt-auto w-full border-t border-border bg-card py-6">
+    <div class="mx-auto max-w-6xl px-6 text-center text-sm text-muted-foreground">
+      全程本地计算，图片与图纸不上传到服务器；服务器不存储、不记录。
+    </div>
+  </footer>
+
+  <a id="back-to-top" data-dom-id="back-to-top" href="#top" class="fixed bottom-6 right-6 flex h-10 w-10 items-center justify-center rounded-full bg-card text-foreground shadow-md border border-border transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="回到顶部">
+    <i data-lucide="arrow-up" class="h-5 w-5"></i>
+  </a>
+
+  <style>
+    .preset-card:has(input:checked),
+    .complexity-card:has(input:checked),
+    .smooth-card:has(input:checked),
+    .scale-card:has(input:checked) {
+      background-color: var(--mirrorpin-primary-50);
+      border-color: var(--mirrorpin-primary);
+      border-width: 2px;
+    }
+    .preset-card:has(input:checked) svg {
+      color: var(--mirrorpin-primary);
+    }
+    .toggle-switch span {
+      pointer-events: none;
+    }
+  </style>
+
+  <script>
+    lucide.createIcons();
+  </script>
+  <script type="module" src="../app/main.mjs"></script>
+</body>
+</html>

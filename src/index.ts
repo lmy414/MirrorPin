@@ -49,4 +49,5 @@ export {
 } from './beadpattern/core';
 export { srgbToLab, ciede2000, type Lab } from './beadpattern/ciede2000';
 export { renderPatternImage, type RenderPatternOptions } from './render/pattern';
-export { renderPatternSvg, renderPatternPng, countGridMaterials, type RenderNodeOptions, type MaterialRow } from './render/node';
+export { renderPatternSvg, renderPatternPng, type RenderNodeOptions } from './render/node';
+export { countGridMaterials, type MaterialRow } from './core/materials';

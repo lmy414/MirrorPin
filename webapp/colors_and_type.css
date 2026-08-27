@@ -1,0 +1,94 @@
+:root {
+  --brand-prefix: "mirrorpin";
+
+  /* Primary hue: warm coral */
+  --mirrorpin-primary: #E85D4C;
+  --mirrorpin-primary-50: #FEF2F0;
+  --mirrorpin-primary-100: #FCE5E2;
+  --mirrorpin-primary-200: #F9C9C3;
+  --mirrorpin-primary-300: #F2A199;
+  --mirrorpin-primary-400: #E85D4C;
+  --mirrorpin-primary-500: #D1483E;
+  --mirrorpin-primary-600: #B33A32;
+  --mirrorpin-primary-700: #942F29;
+
+  /* Neutral surfaces */
+  --mirrorpin-background: #FAFAF8;
+  --mirrorpin-foreground: #1F1F1F;
+  --mirrorpin-card: #FFFFFF;
+  --mirrorpin-card-foreground: #1F1F1F;
+  --mirrorpin-popover: #FFFFFF;
+  --mirrorpin-popover-foreground: #1F1F1F;
+
+  /* Muted / secondary text */
+  --mirrorpin-muted: #F2F2EF;
+  --mirrorpin-muted-foreground: #6B6B6B;
+
+  /* Borders and input */
+  --mirrorpin-border: #E5E5E0;
+  --mirrorpin-input: #E5E5E0;
+  --mirrorpin-ring: #E85D4C;
+
+  /* Primary foreground */
+  --mirrorpin-primary-foreground: #FFFFFF;
+
+  /* State colors */
+  --mirrorpin-state-success: #2A9D58;
+  --mirrorpin-state-warning: #D9781E;
+  --mirrorpin-state-error: #DC2626;
+  --mirrorpin-state-info: #2563EB;
+
+  /* Radius scale */
+  --mirrorpin-radius-xs: 2px;
+  --mirrorpin-radius-sm: 4px;
+  --mirrorpin-radius-md: 8px;
+  --mirrorpin-radius-lg: 16px;
+  --mirrorpin-radius-pill: 999px;
+
+  /* Typography */
+  --mirrorpin-font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mirrorpin-font-mono: "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+
+  /* Semantic aliases expected by head contract */
+  --background: var(--mirrorpin-background);
+  --foreground: var(--mirrorpin-foreground);
+  --card: var(--mirrorpin-card);
+  --card-foreground: var(--mirrorpin-card-foreground);
+  --popover: var(--mirrorpin-popover);
+  --popover-foreground: var(--mirrorpin-popover-foreground);
+  --primary: var(--mirrorpin-primary);
+  --primary-foreground: var(--mirrorpin-primary-foreground);
+  --muted: var(--mirrorpin-muted);
+  --muted-foreground: var(--mirrorpin-muted-foreground);
+  --border: var(--mirrorpin-border);
+  --input: var(--mirrorpin-input);
+  --ring: var(--mirrorpin-ring);
+  --radius-sm: var(--mirrorpin-radius-sm);
+  --radius-md: var(--mirrorpin-radius-md);
+  --radius-lg: var(--mirrorpin-radius-lg);
+}
+
+html {
+  font-family: var(--mirrorpin-font-sans);
+  background: var(--mirrorpin-background);
+  color: var(--mirrorpin-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mirrorpin-heading {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.mirrorpin-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--mirrorpin-muted-foreground);
+}
+
+.mirrorpin-mono {
+  font-family: var(--mirrorpin-font-mono);
+  font-variant-numeric: tabular-nums;
+}

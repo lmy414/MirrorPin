@@ -32,7 +32,10 @@
     "build:cli": "node scripts/build-cli.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "build:webapp": "node scripts/build-webapp.mjs",
+    "serve:webapp": "node scripts/serve-webapp.mjs",
+    "webapp": "npm run build:webapp && npm run serve:webapp"
   },
   "keywords": [
     "perler",
