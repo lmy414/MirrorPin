@@ -5,6 +5,15 @@
 import type { RgbaImage, Grid, Swatch } from '../core/types';
 import { ciede2000, srgbToLab, type Lab } from './ciede2000';
 import { MARD291 } from '../palettes/mard291';
+import { l0Smooth } from '../core/l0';
+import { guidedSmooth } from '../core/guided';
+import { gaussianBlur } from '../core/preprocess';
+import { dpidDownscale } from '../core/dpid';
+
+/** 保边平滑算法（转像素前应用） */
+export type SmoothKind = 'none' | 'gauss' | 'guided' | 'l0';
+/** 降采样算法 */
+export type ScaleKind = 'box' | 'dpid';
 
 // ---------------------------------------------------------------------------
 // 内部表示：网格 = 扁平 RGBA(gw*gh*4)；色卡 = codes/hexes/rgb(0..255)/lab
@@ -495,6 +504,20 @@ export interface BeadOptions {
   minBeads?: number;
   /** flood 去背景 CIEDE2000 阈值 */
   backgroundTolerance?: number;
+  /** 转像素前的保边平滑（默认 none）。l0 参数见 smoothLambda，guided 见 smoothEps */
+  smooth?: SmoothKind;
+  /** gauss 平滑 σ（smooth='gauss' 时生效），默认 1 */
+  smoothSigma?: number;
+  /** L0 梯度稀疏权重（smooth='l0' 时生效），默认 0.02；0.005 为弱档 */
+  smoothLambda?: number;
+  /** 引导滤波窗口半径（smooth='guided' 时生效），默认 8 */
+  smoothRadius?: number;
+  /** 引导滤波正则（smooth='guided' 时生效，0..255 尺度），默认 100 */
+  smoothEps?: number;
+  /** 降采样算法（默认 box）。dpid 仅 auto 网格模式生效；fixed/fill 仍用 box */
+  scale?: ScaleKind;
+  /** DPID 细节权重指数（scale='dpid' 时生效），默认 1.0；0 退化为 box */
+  dpidLambda?: number;
 }
 
 const DEFAULTS_BEAD = {
@@ -538,14 +561,28 @@ export function generatePatternBead(img: RgbaImage, options: BeadOptions): Grid 
     work = cropToSubject(work);
   }
 
+  // 1.5 可选保边平滑（L0 / 引导 / 高斯），在降采样前应用
+  const smooth = options.smooth ?? 'none';
+  if (smooth === 'gauss') {
+    work = gaussianBlur(work, options.smoothSigma ?? 1);
+  } else if (smooth === 'guided') {
+    work = guidedSmooth(work, { r: options.smoothRadius ?? 8, eps: options.smoothEps ?? 100 });
+  } else if (smooth === 'l0') {
+    work = l0Smooth(work, { lam: options.smoothLambda ?? 0.02 });
+  }
+
   // 2. 决定网格 + 可选按比例裁铺满
   const { gw, gh, fit } = chooseGrid(work, options);
   if (options.fill && fit) {
     work = cropToAspectAligned(work, gw, gh);
   }
 
-  // 3. BOX 面积平均缩到网格
-  const grid = toGrid(work, gw, gh, fit);
+  // 3. 降采样到网格：BOX 面积平均（默认）或 DPID 保细节（仅 auto 模式；1:1 时两者皆恒等）
+  let source = work;
+  if (options.scale === 'dpid' && !fit) {
+    source = dpidDownscale(work, gw, gh, { lambda: options.dpidLambda ?? 1.0 });
+  }
+  const grid = toGrid(source, gw, gh, fit);
 
   // 4. 网格级去背景
   let alpha: Uint8ClampedArray;

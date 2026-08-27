@@ -16,7 +16,7 @@ import {
 } from '../src/index';
 import { renderPatternPng, countGridMaterials } from '../src/render/node';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
 
@@ -30,8 +30,8 @@ const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
 
 选项:
   --max-side <n>          网格最大边长（另一边按比例），默认 64
-  --blur <sigma>          高斯模糊强度，默认 1
-  --no-blur               关闭模糊
+  --blur <sigma>          （兼容旧参，显式时覆盖 --smooth）高斯模糊强度
+  --no-blur               （兼容旧参）关闭平滑
   --colors <n>            预处理降色数（0=不降色），默认 64
   --no-crop               关闭透明通道裁剪
   --max-colors <n>        最终色号上限（不限制则省略）
@@ -40,6 +40,9 @@ const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
   --despeckle             清理 <2 格的杂点
   --dither                抖动（照片渐变用，会导致色号增多）
   --board <n>             板界线间隔，默认 29
+  --smooth <kind>         保边平滑（默认 l0）：none/gauss/guided/l0/l0soft
+  --smooth-sigma <n>      gauss/L0 参数（gauss=sσ，l0/l0soft=λ，默认 1/0.02/0.005）
+  --scale <kind>          降采样算法（默认 dpid）：box/dpid
   --palette <name>        色卡：mard291（含扩展 70 色，默认）| mard221（标准 A-H/M 221 色）
   --no-legend             关闭图纸内嵌材料清单面板（默认开启）
   -h, --help              显示帮助
@@ -88,9 +91,9 @@ export async function decode(imagePath: string): Promise<RgbaImage> {
 /** 预处理：高斯模糊(可选) + kmeans 降色(可选)。kColors>=256 或 <=0 表示不降色 */
 export function preprocess(
   img: RgbaImage,
-  opts: { blurOn: boolean; sigma: number; kColors: number },
+  opts: { kColors: number },
 ): RgbaImage {
-  const blurred = opts.blurOn && opts.sigma > 0 ? gaussianBlur(img, opts.sigma) : img;
+  const blurred: RgbaImage = img;
   if (!(opts.kColors > 0) || opts.kColors >= 256) return blurred;
 
   const { width: W, height: H, data } = blurred;
@@ -138,7 +141,7 @@ export interface ConvertArgs {
   /** @default 64 — 与 README 一致；库默认 50（src/beadpattern/core.ts:DEFAULTS_BEAD） */
   maxSide: number;
   /** false=关；数字=sigma @default 1 */
-  blur: number | false;
+  blur: number | false | undefined;
   /** @default 64 — 0=不降色 */
   colors: number;
   crop: boolean;
@@ -152,6 +155,9 @@ export interface ConvertArgs {
   board: number;
   /** 图纸内嵌材料清单面板（默认开） */
   legend: boolean;
+  smooth: 'none' | 'gauss' | 'guided' | 'l0' | 'l0soft';
+  smoothSigma?: number;
+  scale: 'box' | 'dpid';
   /** 色卡：mard291（默认，含扩展）| mard221（标准 A-H/M） */
   palette: PaletteName;
   materials?: string; // 材料清单输出路径（optional，csv）
@@ -162,13 +168,15 @@ export function parseArgs(argv: string[]): ConvertArgs {
     input: '',
     output: '',
     maxSide: 64,
-    blur: 1,
+    blur: undefined as unknown as number | false,
     colors: 64,
     crop: true,
     removeBg: 'none',
     despeckle: false,
     dither: false,
     board: 29,
+    smooth: 'l0',
+    scale: 'dpid',
     legend: true,
     palette: 'mard291',
     minBeads: 0,
@@ -224,6 +232,26 @@ export function parseArgs(argv: string[]): ConvertArgs {
       case '--no-legend':
         a.legend = false;
         break;
+      case '--smooth': {
+        const v = (next() ?? '').toLowerCase();
+        if (v !== 'none' && v !== 'gauss' && v !== 'guided' && v !== 'l0' && v !== 'l0soft') throw new Error(`--smooth 非法取值: ${v}（可选 none/gauss/guided/l0/l0soft）`);
+        a.smooth = v as typeof a.smooth;
+        break;
+      }
+      case '--smooth-sigma': {
+        const raw = next();
+        if (raw === undefined) throw new Error('--smooth-sigma 缺少取值');
+        const v = Number(raw);
+        if (!Number.isFinite(v) || v < 0) throw new Error(`--smooth-sigma 非法取值: ${raw}（需为非负数）`);
+        a.smoothSigma = v;
+        break;
+      }
+      case '--scale': {
+        const v = (next() ?? '').toLowerCase();
+        if (v !== 'box' && v !== 'dpid') throw new Error(`--scale 非法取值: ${v}（可选 box/dpid）`);
+        a.scale = v as typeof a.scale;
+        break;
+      }
       case '--palette': {
         const v = (next() ?? '').toLowerCase();
         if (v !== 'mard291' && v !== 'mard221') throw new Error(`未知色卡: ${v}（可选 mard291 / mard221）`);
@@ -259,7 +287,8 @@ export function parseArgs(argv: string[]): ConvertArgs {
 }
 
 export async function convert(img: RgbaImage, args: ConvertArgs, render: (g: Grid) => Promise<Buffer>): Promise<Grid> {
-  const work = preprocess(img, { blurOn: args.blur !== false, sigma: typeof args.blur === 'number' ? args.blur : 1, kColors: args.colors });
+  // --blur is legacy alias for --smooth gauss; preprocess no longer does blur (handled via BeadOptions.smooth)
+  const work = preprocess(img, { kColors: args.colors });
   const palette = args.palette === 'mard221' ? MARD221 : MARD291;
   const grid = generatePatternBead(work, {
     palette: palette as readonly Swatch[],
@@ -270,6 +299,19 @@ export async function convert(img: RgbaImage, args: ConvertArgs, render: (g: Gri
     dither: args.dither,
     maxColors: args.maxColors,
     minBeads: args.minBeads,
+    ...( (() => {
+      const sigma = args.smoothSigma;
+      if (args.blur !== undefined) {
+        if (args.blur === false) return { smooth: 'none' as const };
+        return { smooth: 'gauss' as const, smoothSigma: args.blur as number };
+      }
+      if (args.smooth === 'gauss') return { smooth: 'gauss' as const, smoothSigma: sigma ?? 1 };
+      if (args.smooth === 'l0') return { smooth: 'l0' as const, smoothLambda: sigma ?? 0.02 };
+      if (args.smooth === 'l0soft') return { smooth: 'l0' as const, smoothLambda: sigma ?? 0.005 };
+      if (args.smooth === 'guided') return { smooth: 'guided' as const, smoothEps: sigma ?? 100, smoothRadius: 8 };
+      return { smooth: 'none' as const };
+    })() ),
+    scale: args.scale,
   });
   if (args.output) {
     const buf = await render(grid);

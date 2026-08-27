@@ -44,6 +44,13 @@ const grid: Grid = generatePatternBead(image: RgbaImage, options: BeadOptions);
 | `cropToSubject` | `boolean` | `false` | 按透明通道裁主体 |
 | `removeBg` | `'none' \| 'flood'` | `'none'` | `flood` 时按颜色清纯背景 |
 | `backgroundTolerance` | `number` | `12` | flood 的 CIEDE2000 阈值 |
+| `smooth` | `'none' \| 'gauss' \| 'guided' \| 'l0'` | `none`（CLI 默认 `l0`） | 转像素前的保边平滑（`gauss` 用 `smoothSigma`，`guided` 用 `smoothRadius/smoothEps`，`l0` 用 `smoothLambda`） |
+| `smoothSigma` | `number` | `1` | gauss 的 σ |
+| `smoothLambda` | `number` | `0.02`（`l0soft` 为 0.005） | L0 的 λ |
+| `smoothRadius` | `number` | `8` | 引导滤波窗口半径 |
+| `smoothEps` | `number` | `100`（0..255 尺度） | 引导滤波正则 |
+| `scale` | `'box' \| 'dpid'` | `box`（CLI 默认 `dpid`） | 降采样；`dpid` 仅 auto 网格生效 |
+| `dpidLambda` | `number` | `1.0`（0 退化为 box） | DPID 细节权重指数 |
 | `despeckle` | `boolean` | `false` | 清理 <2 格的杂点 |
 | `dither` | `boolean` | `false` | Floyd–Steinberg 抖动 |
 | `maxColors` | `number` | — | 最终色号上限（限色） |

@@ -27,6 +27,9 @@ export {
   type SoftOptions,
 } from './core/pipeline';
 export { boxBlur, gaussianBlur } from './core/preprocess';
+export { l0Smooth } from './core/l0';
+export { guidedSmooth } from './core/guided';
+export { dpidDownscale } from './core/dpid';
 export { estimateBackground, computeBBox, cropSquare, type BBox, type BackgroundEstimate } from './core/subject';
 export {
   generatePatternBead,
@@ -41,7 +44,8 @@ export {
   limitColorsIdx,
   mergeRareIdx,
   type BeadOptions,
-  type GridRgba,
+  type SmoothKind,
+  type ScaleKind,
 } from './beadpattern/core';
 export { srgbToLab, ciede2000, type Lab } from './beadpattern/ciede2000';
 export { renderPatternImage, type RenderPatternOptions } from './render/pattern';

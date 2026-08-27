@@ -4,3 +4,4 @@ output/
 .data/
 coverage/
 *.tsbuildinfo
+experiments/

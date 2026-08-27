@@ -6,8 +6,8 @@
 
 ## 特性
 
-- **预处理**：高斯模糊（σ 可调、可开关）降杂色；后续可扩展双边/引导滤波等算法。
-- **转像素**：以 TS 忠实重写 [bead-pattern](https://github.com/wuZHeBoy/bead-pattern) 的整套思路——主体裁剪、Image.BOX 面积平均降采样、完整 **CIEDE2000** 感知配色、网格级去背景、despeckle 除杂、limit_colors 限色、稀有色合并。
+- **预处理**：内置 L0 梯度最小化 / 高斯 / 引导滤波（默认 L0 λ=0.02，保边压平，平坦区自动归零、强边保留锐化），后续可扩展。
+- **转像素**：以 TS 忠实重写 [bead-pattern](https://github.com/wuZHeBoy/bead-pattern) 的整套思路——主体裁剪、保细节降采样（DPID，细节权重偏离均值越大越高）、完整 **CIEDE2000** 感知配色、网格级去背景、despeckle 除杂、limit_colors 限色、稀有色合并。
 - **固定色卡**：内置 **MARD 291** 官方瓶身色号（如 `A1`/`B5`），另可切换 **MARD 221** 标准色卡（A–H/M 系列 221 色）；输出可直接按色号采购。
 - **输出**：正式图纸 PNG（标题栏 + 每格色号 + 坐标 + 网格线 + 板界 + **内嵌材料清单**）+ 材料清单 CSV。
 - **稀有色合并**：`--min-beads` 把用量过少的色号就近并入 CIEDE2000 最近的在用色，避免“买一包只用一两颗”。
@@ -47,6 +47,8 @@ node E:\M_Workbench\MirrorPin\dist\cli.js --version    # 查看版本
 | `--max-side <n>` | 网格最大边长（另一边按比例），需为正整数 | 64 |
 | `--blur <sigma>` | 高斯模糊强度（正数；`0` 表示关闭） | 1 |
 | `--no-blur` | 关闭模糊 | — |
+| `--smooth <kind>` | 保边平滑（默认 `l0`）：`none/gauss/guided/l0/l0soft`；`--smooth-sigma` 调参（gauss=σ，l0/l0soft=λ，guided=eps） | l0 |
+| `--scale <kind>` | 降采样：`box`（面积平均）/ `dpid`（保细节，默认） | dpid |
 | `--colors <n>` | 预处理降色数（0=不降色） | 64 |
 | `--max-colors <n>` | 最终色号上限 | 不限制 |
 | `--min-beads <n>` | 稀有色合并：用量 < n 的色号并入 CIEDE2000 最近在用色 | 不合并 |
@@ -82,7 +84,7 @@ node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" -o 
 
 ## 算法库
 
-入口 `src/index.ts`。核心导出：`generatePatternBead`（转像素主管线）、`gaussianBlur`（预处理）、`renderPatternPng`/`renderPatternSvg`/`countGridMaterials`（渲染与统计）、`MARD291`/`MARD221`（色卡）。
+入口 `src/index.ts`。核心导出：`generatePatternBead`（转像素主管线；`smooth: l0|guided|gauss|none` + `scale: dpid|box`，M1 起默认 `l0+dpid`）、`l0Smooth`/`guidedSmooth`/`dpidDownscale`/`gaussianBlur`（预处理/降采样）、`renderPatternPng`/`renderPatternSvg`/`countGridMaterials`（渲染与统计）、`MARD291`/`MARD221`（色卡）。
 
 ```ts
 import {
@@ -109,8 +111,8 @@ const rows = countGridMaterials(grid); // { code, hex, count }[]
 ### 管线
 
 ```
-预处理(高斯模糊, σ 可调/可关) → 只按透明通道裁主体(有背景则带上)
-→ BOX 面积平均缩到网格(等比, 不拉伸) → CIEDE2000 最近色号
+预处理(保边平滑 L0/引导/高斯，可关) → 只按透明通道裁主体(有背景则带上)
+→ 降采样到网格（DPID 保细节，BOX 等价口径可回退）→ CIEDE2000 最近色号
 → (可选) despeckle 去杂 / limit_colors 限色 / 稀有色合并(mergeRareIdx) / dither
 → 正式图纸渲染(色号+坐标+网格+板界+图例) + 材料清单
 ```
@@ -164,7 +166,7 @@ npm run build    # 生产构建
 - **[bead-pattern](https://github.com/wuZHeBoy/bead-pattern)（MIT）** —— 转像素算法的整体思路与实现被本项目**以 TypeScript 重写**：主体裁剪 `crop_to_subject`、`Image.BOX` 面积平均降采样、完整 `CIEDE2000` 配色、`flood_remove_bg` 去背景、`despeckle`/`limit_colors` 后处理。重写保留其原始 MIT 版权声明。
 - **[pyxelate](https://github.com/sedthh/pyxelate)（MIT）** —— 调研阶段仅作试跑参考，未进入正式管线。
 
-### 运行时依赖及其许可
+### 运行时依赖（新增 fft.js 用于 L0 的频域求解，MIT）及其许可
 
 | 依赖 | 许可 | 用途 |
 |---|---|---|
