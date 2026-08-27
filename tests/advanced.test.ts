@@ -22,7 +22,7 @@ describe('sampleGrid kmeans 模式', () => {
         [100, 100, 100], [200, 200, 200], [0, 0, 0],
       ];
       const c = colors[y * 3 + x]!;
-      return [c[0], c[1], c[2], 255];
+      return [c[0]!, c[1]!, c[2]!, 255];
     });
     const grid = sampleGrid(img, 3, 3, 'kmeans');
     expect(grid).toHaveLength(3);

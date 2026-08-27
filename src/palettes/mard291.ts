@@ -300,3 +300,11 @@ export const MARD291: readonly MardSwatch[] = [
   { code: 'ZG7', hex: 'E2A9D2' },
   { code: 'ZG8', hex: 'AB91C0' },
 ];
+
+const MARD221_PREFIXES = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'M']);
+
+/** MARD 标准 221 色卡（A-H/M 系列，不含 P/Q/R/T/Y/ZG 扩展色），为 MARD291 的子集 */
+export const MARD221: readonly MardSwatch[] = MARD291.filter((s) => {
+  const prefix = s.code.replace(/\d+$/, '');
+  return MARD221_PREFIXES.has(prefix);
+});

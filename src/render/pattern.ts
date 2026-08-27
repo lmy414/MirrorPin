@@ -13,7 +13,7 @@ export interface RenderPatternOptions {
   board?: number;
   /** 左侧坐标区宽度，默认 40 */
   gutter?: number;
-  /** 顶部标题区高度，默认 0（不画标题） */
+  /** 顶部标题区高度（像素），默认 0（不画标题）。注意：与 RenderNodeOptions.title: string 不同 */
   title?: number;
   showCodes?: boolean;
   showCoords?: boolean;

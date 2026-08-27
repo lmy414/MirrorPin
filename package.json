@@ -11,10 +11,16 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
     "./cli": {
       "import": "./dist/cli.js"
+    },
+    "./render-node": {
+      "types": "./dist/render-node.d.ts",
+      "import": "./dist/render-node.js",
+      "require": "./dist/render-node.cjs"
     }
   },
   "files": [
@@ -25,7 +31,8 @@
     "build": "tsup && npm run build:cli",
     "build:cli": "node scripts/build-cli.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "npm run build"
   },
   "keywords": [
     "perler",
@@ -39,7 +46,8 @@
     "pngjs": "^7.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "esbuild": "^0.27.7"
   },
   "dependencies": {
     "sharp": "^0.35.3"

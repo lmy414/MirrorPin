@@ -4,6 +4,7 @@
 
 import type { RgbaImage, Grid, Swatch } from '../core/types';
 import { ciede2000, srgbToLab, type Lab } from './ciede2000';
+import { MARD291 } from '../palettes/mard291';
 
 // ---------------------------------------------------------------------------
 // 内部表示：网格 = 扁平 RGBA(gw*gh*4)；色卡 = codes/hexes/rgb(0..255)/lab
@@ -430,15 +431,56 @@ export function limitColorsIdx(idx: Int32Array, palette: BeadPalette, maxColors:
   return out;
 }
 
+/**
+ * 稀有色合并：把用量 < minBeads 的色号并入 CIEDE2000 最近的在用色。
+ * 每轮取当前用量最少的色合并（目标吸收用量后可能脱离稀有区间），
+ * 级联直到所有在用色达标或只剩一色。minBeads<=1 时原样返回。
+ */
+export function mergeRareIdx(idx: Int32Array, palette: BeadPalette, minBeads: number): Int32Array {
+  if (minBeads <= 1) return idx;
+  const out = new Int32Array(idx);
+  const counts = new Map<number, number>();
+  for (const v of out) {
+    if (v < 0) continue;
+    counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  for (;;) {
+    let victim = -1;
+    let vCount = Infinity;
+    for (const [v, c] of counts) {
+      if (c < vCount) {
+        vCount = c;
+        victim = v;
+      }
+    }
+    if (victim < 0 || vCount >= minBeads || counts.size <= 1) break;
+    const others = [...counts.keys()].filter((c) => c !== victim);
+    let repl = others[0]!;
+    let bestD = Infinity;
+    const vlab = palette.lab[victim]!;
+    for (const o of others) {
+      const d = ciede2000(vlab, palette.lab[o]!);
+      if (d < bestD) {
+        bestD = d;
+        repl = o;
+      }
+    }
+    for (let i = 0; i < out.length; i++) {
+      if (out[i] === victim) out[i] = repl;
+    }
+    counts.set(repl, (counts.get(repl) ?? 0) + vCount);
+    counts.delete(victim);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // 编排：generatePatternBead
 // ---------------------------------------------------------------------------
 
-const BOARD = 29;
-
 export interface BeadOptions {
   palette?: readonly Swatch[];
-  /** 网格最大边长（auto 模式，按原图比例取另一边） */
+  /** 网格最大边长（auto 模式，按原图比例取另一边） @default 50（库默认；CLI 默认 64） */
   maxSide?: number;
   /** 固定尺寸（如 58x58），此时按比例居中补透明 */
   fixed?: { w: number; h: number };
@@ -449,12 +491,14 @@ export interface BeadOptions {
   dither?: boolean;
   despeckle?: boolean;
   maxColors?: number;
+  /** 稀有色合并阈值：用量低于该值的色号就近并入邻近色（0/1=关） */
+  minBeads?: number;
   /** flood 去背景 CIEDE2000 阈值 */
   backgroundTolerance?: number;
 }
 
 const DEFAULTS_BEAD = {
-  maxSide: 50,
+  maxSide: 50, // 库默认 50，CLI 默认 64（见 cli/index.ts:parseArgs）
   /** 默认 none：只按透明通道裁主体，有色背景保留；'flood' 用 CIEDE2000 按颜色清纯背景 */
   removeBg: 'none' as 'none',
   despeckle: false,
@@ -527,6 +571,10 @@ export function generatePatternBead(img: RgbaImage, options: BeadOptions): Grid 
   if (options.maxColors && options.maxColors > 0) {
     idx = limitColorsIdx(idx, palette, options.maxColors);
   }
+  const minBeads = options.minBeads ?? 0;
+  if (minBeads > 1) {
+    idx = mergeRareIdx(idx, palette, minBeads);
+  }
 
   // 7. 输出 Grid
   const cells: Grid['cells'] = [];
@@ -546,7 +594,3 @@ export function generatePatternBead(img: RgbaImage, options: BeadOptions): Grid 
   for (const r of cells) for (const c of r) if (!c.external) colorSet.add(c.code);
   return { rows: gh, cols: gw, cells, colorCount: colorSet.size };
 }
-
-// 循环依赖规避：默认色卡在此懒加载（避免 core/types 反向引用 palettes）
-import { MARD291 } from '../palettes/mard291';
-const MARD291_DEFAULT: readonly Swatch[] = MARD291;

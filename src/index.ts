@@ -1,6 +1,7 @@
 // MirrorPin 算法内核（M0）公共出口
 
-export { MARD291, type MardSwatch } from './palettes/mard291';
+export { MARD291, MARD221, type MardSwatch } from './palettes/mard291';
+// MardSwatch 与 Swatch 同构，保留别名以兼容历史导入
 
 export type { RGB, RgbaImage, Swatch, Cell, Grid } from './core/types';
 
@@ -38,8 +39,10 @@ export {
   matchDitherData,
   despeckle,
   limitColorsIdx,
+  mergeRareIdx,
   type BeadOptions,
   type GridRgba,
 } from './beadpattern/core';
 export { srgbToLab, ciede2000, type Lab } from './beadpattern/ciede2000';
 export { renderPatternImage, type RenderPatternOptions } from './render/pattern';
+export { renderPatternSvg, renderPatternPng, countGridMaterials, type RenderNodeOptions, type MaterialRow } from './render/node';
