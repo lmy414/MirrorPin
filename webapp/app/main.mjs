@@ -137,12 +137,26 @@ function bootIndex() {
     }
   });
 
+  // 恢复上次已上传的图片（从 IDB），让“返回修改参数”后可直接重生成
+  (async () => {
+    const prev = await idbGet('img');
+    if (!prev) return;
+    const nameEl = document.querySelector('#upload-filled p.truncate');
+    const sizeEl = document.querySelector('#upload-filled p.text-xs');
+    if (nameEl) nameEl.textContent = prev.name;
+    const imgEl = new Image();
+    imgEl.onload = () => { if (sizeEl) sizeEl.textContent = `${imgEl.naturalWidth} × ${imgEl.naturalHeight} px`; };
+    imgEl.src = URL.createObjectURL(prev.blob);
+  })();
+
   generateCta.addEventListener('click', async () => {
     const f = fileInput.files?.[0];
-    if (!f) return;
+    const prev = await idbGet('img');
+    if (!f && !prev) return; // 无图不生成（按钮本已禁用，双保险）
+    const blob = f ? f : prev.blob;
+    const name = f ? f.name : prev.name;
     try {
-      const blob = f;
-      await idbPut('img', { name: f.name, type: f.type, blob });
+      await idbPut('img', { name, type: blob.type, blob });
       await idbPut('params', collectParams());
       location.href = './generating.html';
     } catch (e) {
@@ -158,26 +172,47 @@ function bootIndex() {
 function bootGenerating() {
   const summary = document.querySelector('[data-region="loading"] .mirrorpin-mono');
   const cancel = document.getElementById('cancel-generate');
+  let worker = null;
+
+  const fail = async (msg) => {
+    await idbPut('error', String(msg));
+    location.href = './error.html';
+  };
+
+  // 取消：跳回 index（worker 随页面卸载终止，结果丢弃）
+  cancel?.addEventListener('click', () => {
+    if (worker) worker.terminate();
+    location.href = './index.html';
+  });
 
   (async () => {
     const img = await idbGet('img');
     const params = (await idbGet('params')) ?? {};
     if (!img) {
-      await idbPut('error', '未找到上传的图片，请返回重新选择。');
-      location.href = './error.html';
+      await fail('未找到上传的图片，请返回重新选择。');
       return;
     }
     const spec = BOARD_PRESETS[params.board] ?? BOARD_PRESETS['78x78'];
     if (summary) {
       summary.textContent = `${spec.label.split('（')[0]} · ${params.palette === 'mard291' ? 'MARD 291' : 'MARD 221'} · ${params.minBeads ? '合并' : '标准'} · ${params.removeBg ? '抠白底' : '保留背景'}`;
     }
-    // 先让 loading 动画渲染一帧，再开始计算
-    await new Promise((r) => setTimeout(r, 60));
     try {
+      // 解码在主线程（快）；生成计算移入 Web Worker，动画全程流畅
       const rgba = await decodeImage(img.blob);
-      const t0 = performance.now();
-      const result = generateForBoard(rgba, params);
-      const ms = Math.round(performance.now() - t0);
+      worker = new Worker(new URL('./algo.worker.mjs', import.meta.url), { type: 'module' });
+      const result = await new Promise((resolve, reject) => {
+        worker.onmessage = (e) => {
+          if (e.data.type === 'done') resolve(e.data);
+          else reject(new Error(e.data.message));
+        };
+        worker.onerror = (e) => reject(new Error(e.message || 'worker error'));
+        worker.postMessage(
+          { type: 'generate', img: { width: rgba.width, height: rgba.height, data: rgba.data }, params },
+          [rgba.data.buffer], // transferable 零拷贝
+        );
+      });
+      worker.terminate();
+      worker = null;
       await idbPut('grid', result.grid);
       await idbPut('meta', {
         name: img.name.replace(/\.[^.]+$/, ''),
@@ -185,19 +220,14 @@ function bootGenerating() {
         palette: params.palette,
         renderCell: params.advanced?.renderCell ?? 40,
         renderBoard: params.advanced?.renderBoard ?? 29,
-        elapsedMs: ms,
+        elapsedMs: result.elapsedMs,
       });
       location.href = './result.html';
     } catch (e) {
-      await idbPut('error', String(e && e.message ? e.message : e));
-      location.href = './error.html';
+      if (worker) { worker.terminate(); worker = null; }
+      await fail(e && e.message ? e.message : e);
     }
   })();
-
-  // 取消：跳回 index（localStorage 不清理，用户可重来）
-  cancel?.addEventListener('click', () => {
-    location.href = './index.html';
-  });
 }
 
 // ---------------------------------------------------------------------------
