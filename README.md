@@ -11,6 +11,31 @@ MirrorPin 把图片转换为可直接发布和采购的拼豆图纸：输出带�
 - **浏览器本地运行**：生成在 Web Worker 中执行，带真实阶段进度、取消、诊断和 stale-result 防护；图片与结果不上传、不写入服务器。
 - **MARD 色卡**：内置 MARD 291 与标准 MARD 221。
 
+## 运行效果展示
+
+下面使用同一张 Q13 原图展示三种生成结果。输出图包含拼豆网格、色号、坐标、板界和材料清单，可直接下载发布或据此采购材料。
+
+<table>
+  <tr>
+    <td align="center"><strong>原图</strong></td>
+    <td align="center"><strong>标准结果</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/q13-source.png" alt="Q13 原图" width="420"></td>
+    <td><img src="docs/assets/q13-pattern-standard.png" alt="Q13 标准拼豆图纸" width="420"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>颜色更少</strong></td>
+    <td align="center"><strong>颜色最少</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/q13-pattern-less.png" alt="Q13 颜色更少拼豆图纸" width="420"></td>
+    <td><img src="docs/assets/q13-pattern-minimal.png" alt="Q13 颜色最少拼豆图纸" width="420"></td>
+  </tr>
+</table>
+
+> 展示图由用户指定的本地素材生成；MARD 屏幕色值仅作预览，成品颜色以实物色卡为准。
+
 ## 安装与验证
 
 ```bash
@@ -97,7 +122,7 @@ npm run build:webapp
 npm run serve:webapp
 ```
 
-打开 [http://localhost:5173/](http://localhost:5173/)。Webapp 使用 IndexedDB 在页面间保存本地图片、参数、Grid、diagnostics、schema version 和 algorithm version；所有计算仍在浏览器内完成。
+打开 [http://localhost:5173/](http://localhost:5173/)。也可以直接访问根级页面入口：`/generating`、`/result`、`/error`；它们会转入对应的物理页面，因此普通静态服务器不需要 SPA rewrite。Webapp 使用 IndexedDB 在页面间保存本地图片、参数、Grid、diagnostics、schema version 和 algorithm version；所有计算仍在浏览器内完成。
 
 三种质量档：
 
@@ -111,7 +136,7 @@ npm run serve:webapp
 npm run build:webapp-deploy
 ```
 
-产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip`。ZIP 根目录含 `index.html`，无需 rewrite；服务器需将 `.mjs` 返回为 JavaScript MIME。
+产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip`。ZIP 根目录含 `index.html` 以及 `generating/`、`result/`、`error/` 物理路由目录，无需 rewrite；服务器需将 `.mjs` 返回为 JavaScript MIME。
 
 ## Minitool
 
