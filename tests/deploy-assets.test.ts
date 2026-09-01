@@ -31,6 +31,29 @@ describe('self-contained webapp deployment', () => {
     expect(packageJson.scripts['build:webapp-deploy']).toContain('build-webapp-deploy.mjs');
   });
 
+  it('keeps public documentation product-facing', () => {
+    const publicDocs = [
+      readFileSync(resolve(root, 'README.md'), 'utf8'),
+      readFileSync(resolve(root, 'webapp', 'README.md'), 'utf8'),
+      readFileSync(resolve(root, 'webapp', 'DEPLOYMENT.md'), 'utf8'),
+      readFileSync(resolve(root, 'docs', 'UI-UX-Handoff.md'), 'utf8'),
+      readFileSync(resolve(root, 'CHANGELOG.md'), 'utf8'),
+    ].join('\n');
+
+    for (const phrase of [
+      '用户指定的本地素材',
+      '不伪造语义标注',
+      '不会提交用户图片',
+      '服务器不存储、不画像、不埋点',
+      '图片与图纸不上传到服务器；服务器不存储、不记录',
+    ]) {
+      expect(publicDocs).not.toContain(phrase);
+    }
+    expect(publicDocs).toContain(
+      '图片处理和图纸生成均在浏览器本地完成，图片和生成结果保留在当前设备',
+    );
+  });
+
   it('ships the shared surface system and accessible staged progress UI', () => {
     const css = readFileSync(
       resolve(root, 'webapp', 'app', 'tailwind.input.css'),

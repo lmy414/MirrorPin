@@ -15,7 +15,7 @@
 - IndexedDB schema v2 保存图片、参数、Grid、diagnostics 和版本。
 - 可重复验收矩阵：mean/P95 CIEDE2000、碎片、flat transition、edge F1、thin-line recall、颜色数、耗时、内存和三次确定性 SHA-256。
 - 完全自包含 Webapp 部署 ZIP，含根 `index.html` 与 `/generating`、`/result`、`/error` 物理路由别名，不再依赖 Tailwind/Lucide CDN 或 SPA rewrite。
-- README 运行效果展示，包含用户指定的 Q13 原图和三张拼豆图纸输出。
+- README 增加示例图片及三种拼豆图纸输出展示。
 
 ### Changed
 

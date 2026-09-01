@@ -8,7 +8,7 @@
 
 ## 0. 一句话定位
 
-用户上传一张图 → 选板子与少数可选项 → 点「生成」→ 拿到可直接拼的正式图纸与材料清单。所有计算在浏览器本地完成，图片与图纸不经过服务器。
+用户上传一张图 → 选板子与少数可选项 → 点「生成」→ 拿到可直接拼的正式图纸与材料清单。图片处理和图纸生成均在浏览器本地完成，图片和生成结果保留在当前设备。
 
 ---
 
@@ -98,7 +98,7 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 - 当前实现位于 `E:\M_Workbench\MirrorPin\webapp`：静态上传/生成中/结果/错误四页，使用 `createImageBitmap→canvas.getImageData` 解码，按一次性表单提交，不做实时重算。
 - 旧实时滑杆与旧 k-means 页面管线不参与当前产品；预降色只作为高级 API 兼容能力，Webapp 默认关闭。
 - 全流程本地：主线程负责解码、页面状态与渲染；`generateForBoard` 在 Web Worker 中执行。Worker 回传 `prepare/resample/candidates/optimize/cleanup/done` 真实阶段、diagnostics、耗时和算法版本；取消会终止 Worker，requestId 用于丢弃 stale result。
-- 约束：**不把图片与图纸发到服务器**，服务器不存储、不画像、不埋点。页面运行时只加载部署包内的本地 HTML/CSS/ESM/Worker 资产，不依赖 CDN。
+- 数据处理：图片处理和图纸生成均在浏览器本地完成，当前会话数据保存在浏览器 IndexedDB。页面运行时只加载部署包内的 HTML/CSS/ESM/Worker 资产，不依赖 CDN。
 
 ---
 
@@ -165,9 +165,9 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 
 每项带默认值小字与「恢复默认」链路；高级区收起只影响展示，当前值仍参与生成，并在返回修改参数时从 IndexedDB 完整恢复。
 
-### 3.6 隐私与合规（向用户承诺）
+### 3.6 数据处理说明
 
-页脚常驻一句话：**“全程本地计算，图片与图纸不上传到服务器；服务器不存储、不记录。”** 链接到本节。后续若接入匿名访问统计，需另行告知（不含图像内容）。
+页脚常驻一句话：**“图片处理和图纸生成均在浏览器本地完成，图片和生成结果保留在当前设备。”** 页面无需额外隐私说明链接。
 
 ---
 
@@ -187,7 +187,7 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 2. 抠白底的默认态与文案；
 3. 板规四卡片的排布与非标角标；
 4. 高级设置中平滑分组的 4 选呈现（单选/下拉）与「恢复默认」交互；
-5. 隐私承诺的露出位置与 wording。
+5. 本地处理说明的露出位置与文案。
 
 ---
 
@@ -198,5 +198,5 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 - [ ] 所有产品默认（不展开高级）等价于 `guided(r8,eps100)+area+spatial(topK8,strength0.35)`；
 - [ ] 高级展开后改参可生效且可一键恢复默认；
 - [ ] 生成中可取消/重试，完成后可下载 PNG 与 CSV（含信息条）；
-- [ ] 页脚含本地计算隐私承诺；
+- [ ] 页脚含简洁的本地处理说明；
 - [ ] `E:\M_Workbench\MirrorPin\webapp` 可完成源码构建，且 `E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip` 解压后的根入口可直接加载。

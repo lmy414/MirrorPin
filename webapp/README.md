@@ -30,9 +30,9 @@ npm run serve:webapp
 
 Worker 进度阶段：`prepare / resample / candidates / optimize / cleanup / done`。完成消息包含 `requestId`、`diagnostics`、耗时和 `algorithmVersion`。
 
-## 本地数据与隐私
+## 数据处理
 
-图片、参数、Grid 和 diagnostics 只保存在当前浏览器 IndexedDB。图片和图纸不上传，不写入服务器，不依赖远程 API、CDN 或第三方字体。
+图片处理和图纸生成均在浏览器本地完成，图片和生成结果保留在当前设备。当前会话数据保存在浏览器 IndexedDB，页面不依赖远程 API、CDN 或第三方字体。
 
 ## 部署包
 
