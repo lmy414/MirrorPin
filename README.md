@@ -13,28 +13,28 @@ MirrorPin 把图片转换为可直接发布和采购的拼豆图纸：输出带�
 
 ## 运行效果展示
 
-下面使用同一张示例图片展示三种生成结果。输出图包含拼豆网格、色号、坐标、板界和材料清单，可直接下载发布或据此采购材料。
+下面使用同一张示例图片展示 104×104、78×78 和 52×52 三种板规的生成结果。输出图包含拼豆网格、色号、坐标、板界和材料清单，可直接下载发布或据此采购材料。
 
 <table>
   <tr>
     <td align="center"><strong>原图</strong></td>
-    <td align="center"><strong>标准结果</strong></td>
+    <td align="center"><strong>104 × 104 图纸</strong></td>
   </tr>
   <tr>
     <td><img src="docs/assets/q13-source.png" alt="Q13 原图" width="420"></td>
-    <td><img src="docs/assets/q13-pattern-standard.png" alt="Q13 标准拼豆图纸" width="420"></td>
+    <td><img src="docs/assets/q13-pattern-standard.png" alt="Q13 104 × 104 拼豆图纸" width="420"></td>
   </tr>
   <tr>
-    <td align="center"><strong>颜色更少</strong></td>
-    <td align="center"><strong>颜色最少</strong></td>
+    <td align="center"><strong>78 × 78 图纸</strong></td>
+    <td align="center"><strong>52 × 52 图纸</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/q13-pattern-less.png" alt="Q13 颜色更少拼豆图纸" width="420"></td>
-    <td><img src="docs/assets/q13-pattern-minimal.png" alt="Q13 颜色最少拼豆图纸" width="420"></td>
+    <td><img src="docs/assets/q13-pattern-less.png" alt="Q13 78 × 78 拼豆图纸" width="420"></td>
+    <td><img src="docs/assets/q13-pattern-minimal.png" alt="Q13 52 × 52 拼豆图纸" width="420"></td>
   </tr>
 </table>
 
-> 示例展示同一张原图在不同颜色控制策略下的生成效果。屏幕显示可能存在色差，实际颜色请以 MARD 实物色卡为准。
+> 示例展示同一张原图在不同板规下的生成效果。屏幕显示可能存在色差，实际颜色请以 MARD 实物色卡为准。
 
 ## 安装与验证
 
