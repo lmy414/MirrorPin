@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>MirrorPin 拼豆图纸</title>
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">MIRRORPIN · OFFLINE TOOL</p>
+        <h1>拼豆图纸生成器</h1>
+      </div>
+      <span class="privacy-pill">全程本地处理</span>
+    </header>
+
+    <main class="page">
+      <section class="intro" aria-labelledby="intro-title">
+        <p class="kicker">把图片变成可采购的拼豆图纸</p>
+        <h2 id="intro-title">上传图片，选择板规，生成图纸。</h2>
+        <p>图片不会上传网络。算法、预览和材料统计都在当前设备内完成。</p>
+        <p class="quality-note">建议使用白底或带透明通道的图片，生成质量更佳。</p>
+        <p class="quality-note">边界清晰、细节较少、颜色较少的图片更适合生成；构图复杂、细节较多或颜色丰富时，质量会下降，可能出现较多杂色。</p>
+        <p class="version-line">算法库版本 v0.2.0</p>
+      </section>
+
+      <section class="panel" aria-labelledby="upload-title">
+        <div class="section-heading">
+          <div>
+            <span class="step">01</span>
+            <h2 id="upload-title">上传图片</h2>
+          </div>
+          <span class="hint">PNG / JPG / WebP</span>
+        </div>
+        <label id="upload-zone" class="dropzone" for="upload-input">
+          <input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp" />
+          <span class="upload-mark" aria-hidden="true">
+            <img src="./assets/mirrorpin-upload-icon.png" alt="" />
+            <span class="upload-check">✓</span>
+          </span>
+          <span class="dropzone-title">点击选择图片</span>
+          <span class="dropzone-copy">也可以把图片拖到这里</span>
+          <span id="file-summary" class="file-summary" hidden></span>
+          <img id="source-preview" class="source-preview" alt="已选择图片预览" hidden />
+        </label>
+        <p id="upload-status" class="form-hint" aria-live="polite">请选择一张图片开始。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="board-title">
+        <div class="section-heading">
+          <div>
+            <span class="step">02</span>
+            <h2 id="board-title">选择板规</h2>
+          </div>
+          <span class="hint">固定网格尺寸</span>
+        </div>
+        <div class="choice-grid board-grid">
+          <label class="choice-card">
+            <input type="radio" name="board" value="52x52" />
+            <span class="choice-title">52 × 52</span>
+            <span class="choice-copy">标准小图</span>
+          </label>
+          <label class="choice-card selected">
+            <input type="radio" name="board" value="78x78" checked />
+            <span class="choice-title">78 × 78</span>
+            <span class="choice-copy">单板推荐</span>
+          </label>
+          <label class="choice-card">
+            <input type="radio" name="board" value="104x104" />
+            <span class="choice-title">104 × 104</span>
+            <span class="choice-copy">双板大图</span>
+          </label>
+          <label class="choice-card">
+            <input type="radio" name="board" value="78x52" />
+            <span class="choice-title">78 × 52</span>
+            <span class="choice-copy">横向非标</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="params-title">
+        <div class="section-heading">
+          <div>
+            <span class="step">03</span>
+            <h2 id="params-title">调整参数</h2>
+          </div>
+          <span class="hint">默认值适合大多数图片</span>
+        </div>
+
+        <div class="field-row">
+          <label class="field-label" for="palette-select">色卡</label>
+          <select id="palette-select">
+            <option value="mard221" selected>MARD 221 · 标准色</option>
+            <option value="mard291">MARD 291 · 扩展色</option>
+          </select>
+          <p class="field-help">标准色更容易买齐。</p>
+        </div>
+
+        <fieldset class="field-group">
+          <legend class="field-label">颜色控制</legend>
+          <div class="choice-grid three-col">
+            <label class="choice-card compact selected">
+              <input type="radio" name="complexity" value="standard" checked />
+              <span class="choice-title">标准</span>
+              <span class="choice-copy">不合并</span>
+            </label>
+            <label class="choice-card compact">
+              <input type="radio" name="complexity" value="less" />
+              <span class="choice-title">颜色更少</span>
+              <span class="choice-copy">少于 5 豆合并</span>
+            </label>
+            <label class="choice-card compact">
+              <input type="radio" name="complexity" value="minimal" />
+              <span class="choice-title">颜色最少</span>
+              <span class="choice-copy">少于 10 豆合并</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="switch-row">
+          <div>
+            <span class="field-label">抠白底</span>
+            <p class="field-help">开启后去掉纸张或纯白背景；关闭则保留原图背景。</p>
+          </div>
+          <button id="remove-bg-toggle" class="switch" type="button" role="switch" aria-checked="false" aria-label="抠白底">
+            <span></span>
+          </button>
+        </div>
+
+        <details class="advanced">
+          <summary>高级设置 <span>可选</span></summary>
+          <div class="advanced-body">
+            <div class="field-row">
+              <label class="field-label" for="smooth-select">平滑</label>
+              <select id="smooth-select">
+                <option value="l0" selected>L0 标准</option>
+                <option value="weak">L0 弱</option>
+                <option value="guided">引导滤波</option>
+                <option value="gaussian">高斯</option>
+                <option value="off">关闭</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label class="field-label" for="scale-select">缩放算法</label>
+              <select id="scale-select">
+                <option value="dpid" selected>DPID · 保细节</option>
+                <option value="box">BOX · 面积平均</option>
+              </select>
+            </div>
+            <div class="input-grid">
+              <label>
+                <span>预处理降色</span>
+                <input id="preprocess-colors" type="number" min="0" max="255" step="1" value="64" inputmode="numeric" />
+              </label>
+              <label>
+                <span>稀有色合并</span>
+                <input id="min-beads" type="number" min="0" max="1000" step="1" placeholder="跟随颜色控制" inputmode="numeric" />
+              </label>
+              <label>
+                <span>最大颜色数</span>
+                <input id="max-colors" type="number" min="1" max="291" inputmode="numeric" placeholder="不限" />
+              </label>
+              <label>
+                <span>渲染格子 px</span>
+                <input id="render-cell" type="number" min="20" max="80" value="40" inputmode="numeric" />
+              </label>
+              <label>
+                <span>板界间隔</span>
+                <input id="render-board" type="number" min="0" max="104" value="29" inputmode="numeric" />
+              </label>
+              <label>
+                <span>白底容差</span>
+                <input id="bg-tolerance" type="number" min="0" max="100" value="12" inputmode="numeric" />
+              </label>
+            </div>
+            <p class="field-help">预处理降色填 0 表示关闭；稀有色合并填 5 表示少于 5 豆的色号并入邻近色，留空则跟随上面的颜色控制。</p>
+            <div class="switch-pair">
+              <button id="dither-toggle" class="switch small" type="button" role="switch" aria-checked="false">
+                <span></span>
+              </button>
+              <label for="dither-toggle">抖动</label>
+              <button id="despeckle-toggle" class="switch small" type="button" role="switch" aria-checked="false">
+                <span></span>
+              </button>
+              <label for="despeckle-toggle">去杂点</label>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="action-panel" aria-labelledby="generate-title">
+        <button id="generate-cta" class="primary-button" type="button" disabled>
+          <span id="generate-label">生成拼豆图纸</span>
+        </button>
+        <p id="generate-status" class="action-status" aria-live="polite">选择图片后即可生成。</p>
+      </section>
+
+      <section id="result-section" class="panel result-panel" aria-labelledby="result-title" hidden>
+        <div class="section-heading">
+          <div>
+            <span class="step">04</span>
+            <h2 id="result-title">图纸结果</h2>
+          </div>
+          <button id="edit-again" class="text-button" type="button">返回修改</button>
+        </div>
+        <div id="result-summary" class="result-summary" aria-live="polite"></div>
+        <div id="pattern-preview" class="pattern-preview">
+          <p class="empty-state">图纸将在这里显示。</p>
+        </div>
+        <div class="result-actions">
+          <button id="save-image" class="primary-button" type="button">保存图纸 PNG 到相册</button>
+          <p id="save-status" class="form-hint" aria-live="polite">图纸按原尺寸渲染；支持容器能力的环境可直接保存到相册。</p>
+        </div>
+        <div class="materials-block">
+          <div class="materials-heading">
+            <div>
+              <h3>材料清单</h3>
+              <p>可长按下方文本选择并复制。</p>
+            </div>
+            <span id="material-count" class="count-badge"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="material-table">
+              <thead><tr><th>色号</th><th>色值</th><th>用量</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <textarea id="materials-text" class="materials-text" readonly aria-label="材料清单文本"></textarea>
+          <div class="materials-actions">
+            <button id="save-materials" class="secondary-button" type="button">保存材料清单 PNG 到相册</button>
+            <p id="materials-save-status" class="form-hint" aria-live="polite">将生成高清材料清单图片；没有相册接口时可长按图片保存。</p>
+          </div>
+          <div id="materials-image-preview" class="materials-image-preview" hidden></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">MirrorPin · 算法库 v0.2.0 · 图片与结果只留在当前设备</footer>
+  </div>
+
+  <script src="./assets/algo.js"></script>
+  <script src="./assets/main.js"></script>
+</body>
+</html>

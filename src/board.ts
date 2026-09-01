@@ -2,7 +2,7 @@
 // - 用户选：图片、板规、色卡、稀有色阈值、是否抠白底（其余底层参数内部固化）
 // - 高级（折叠）：平滑/降采样/限色/抖动/阈值/渲染像素值
 
-import type { RgbaImage, Grid } from './core/types';
+import type { ColorQuantizeOptions, RgbaImage, Grid } from './core/types';
 import { generatePatternBead, type SmoothKind, type ScaleKind } from './beadpattern/core';
 import { MARD291, MARD221 } from './palettes/mard291';
 
@@ -17,9 +17,13 @@ export const BOARD_PRESETS: Record<BoardSpec, { w: number; h: number; label: str
 };
 
 export interface AdvancedOptions {
-  /** 保边平滑，默认 'l0' */
+  /** 统一 core 预处理 k-means 选项；默认不传则关闭。 */
+  colorQuantize?: ColorQuantizeOptions;
+  /** @deprecated 兼容旧 UI；内部转换为 colorQuantize.colors。 */
+  colors?: number;
+  /** 保边平滑，默认 'guided'（避免大图 L0-PCG 计算时间与工作区峰值） */
   smooth?: SmoothKind;
-  /** L0 的 λ，默认 0.02（l0soft=0.005） */
+  /** L0 的 λ，默认 0.02；board 默认 smooth=guided，CLI 默认 smooth=l0。 */
   smoothLambda?: number;
   /** gauss 的 σ，默认 1 */
   smoothSigma?: number;
@@ -52,7 +56,7 @@ export interface TopLevelOptions {
   palette?: PaletteId;
   /** 稀有色合并阈值（用量 < minBeads 的色号并入邻近色），默认 0=不合并，前端可暴露为“无/5/10”三档 */
   minBeads?: number;
-  /** 是否网格级抠白底（flood），默认 false */
+  /** 是否在源图阶段用安全置信度 flood 构建前景 mask，默认 false */
   removeBg?: boolean;
   /** 主体透明裁剪，默认 true（前端不暴露） */
   cropToSubject?: boolean;
@@ -72,13 +76,14 @@ export function generateForBoard(img: RgbaImage, opts: TopLevelOptions): Generat
   if (!spec) throw new Error(`未知板规: ${opts.board}`);
   const palette = opts.palette === 'mard291' ? MARD291 : MARD221;
   const a = opts.advanced;
+  const colorQuantize = a?.colorQuantize ?? (a?.colors === undefined ? undefined : { colors: a.colors });
   const grid = generatePatternBead(img, {
     fixed: { w: spec.w, h: spec.h },
     fill: true,
     cropToSubject: opts.cropToSubject ?? true,
     palette,
     minBeads: opts.minBeads ?? 0,
-    smooth: a?.smooth ?? 'l0',
+    smooth: a?.smooth ?? 'guided',
     smoothLambda: a?.smoothLambda ?? 0.02,
     smoothSigma: a?.smoothSigma ?? 1,
     smoothRadius: a?.smoothRadius ?? 8,
@@ -90,6 +95,7 @@ export function generateForBoard(img: RgbaImage, opts: TopLevelOptions): Generat
     despeckle: a?.despeckle ?? false,
     backgroundTolerance: a?.backgroundTolerance ?? 12,
     removeBg: opts.removeBg ? 'flood' : 'none',
+    colorQuantize,
   });
 
   const ok = grid.cols === spec.w && grid.rows === spec.h;

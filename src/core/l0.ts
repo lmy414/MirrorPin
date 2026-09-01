@@ -2,73 +2,201 @@
 // 移植自 t-suzuki/l0_gradient_minimization (Public Domain)
 //   https://github.com/t-suzuki/l0_gradient_minimization_test
 // 论文: "Image Smoothing via L0 Gradient Minimization", Li Xu et al., SIGGRAPH Asia 2011。
-// FFT 依赖 fft.js (MIT)。仅处理 RGB，alpha 原样保留。
+// 本实现使用非周期 Neumann 离散梯度及确定性的 PCG，而非周期 FFT 分母。
+// 仅处理 RGB，alpha 原样保留；浏览器纯 TypeScript。
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import FFT from 'fft.js';
 import type { RgbaImage } from './types';
 
-interface FftJs {
-  new (size: number): {
-    createComplexArray(): number[];
-    transform(out: number[], data: number[]): void;
-    inverseTransform(out: number[], data: number[]): void;
-  };
+const MAX_L0_MEMORY_BYTES = 64 * 1024 * 1024;
+// Peak live allocations include input/smooth(6), PCG rhs/residual/direction/operator/
+// preconditioned(5), gradient scratch(2), split gradients(6), and the returned RGBA output.
+const FLOAT64_ARRAYS_PER_PIXEL = 13;
+const FLOAT32_ARRAYS_PER_PIXEL = 6;
+const UINT8_ARRAYS_PER_PIXEL = 1;
+const UINT8_ELEMENTS_PER_PIXEL = 4;
+const UINT8_BYTES_PER_PIXEL = UINT8_ARRAYS_PER_PIXEL * UINT8_ELEMENTS_PER_PIXEL * Uint8ClampedArray.BYTES_PER_ELEMENT;
+const FLOAT64_BYTES_PER_PIXEL = FLOAT64_ARRAYS_PER_PIXEL * Float64Array.BYTES_PER_ELEMENT;
+const FLOAT32_BYTES_PER_PIXEL = FLOAT32_ARRAYS_PER_PIXEL * Float32Array.BYTES_PER_ELEMENT;
+const WORK_BYTES_PER_PIXEL = FLOAT64_BYTES_PER_PIXEL + FLOAT32_BYTES_PER_PIXEL + UINT8_BYTES_PER_PIXEL;
+const MAX_L0_PIXELS = Math.floor(MAX_L0_MEMORY_BYTES / WORK_BYTES_PER_PIXEL);
+
+export interface NeumannSolveStats {
+  iterations: number;
+  residual: number;
+  tolerance: number;
 }
 
-/** 2D FFT 执行器（W/H 均需为 2 的幂） */
-function makeFFT2(W: number, H: number) {
-  const Fft = FFT as unknown as FftJs;
-  const fRow = new Fft(W);
-  const fCol = new Fft(H);
-  const rowIn = fRow.createComplexArray();
-  const rowOut = fRow.createComplexArray(); // fft.js 要求输入输出缓冲区不同
-  const colIn = fCol.createComplexArray();
-  const colOut = fCol.createComplexArray();
+function checkGrid(width: number, height: number, values: Float64Array): void {
+  if (!Number.isInteger(width) || width < 1 || !Number.isInteger(height) || height < 1) {
+    throw new Error('Neumann 网格 width/height 必须为正整数');
+  }
+  if (values.length !== width * height) throw new Error('Neumann 网格数据长度不匹配');
+}
 
-  function pass2d(re: Float64Array, im: Float64Array, forward: boolean): void {
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        rowIn[x * 2] = re[y * W + x]!;
-        rowIn[x * 2 + 1] = im[y * W + x]!;
-      }
-      if (forward) fRow.transform(rowOut, rowIn);
-      else fRow.inverseTransform(rowOut, rowIn);
-      for (let x = 0; x < W; x++) {
-        re[y * W + x] = rowOut[x * 2]!;
-        im[y * W + x] = rowOut[x * 2 + 1]!;
-      }
-    }
-    for (let x = 0; x < W; x++) {
-      for (let y = 0; y < H; y++) {
-        colIn[y * 2] = re[y * W + x]!;
-        colIn[y * 2 + 1] = im[y * W + x]!;
-      }
-      if (forward) fCol.transform(colOut, colIn);
-      else fCol.inverseTransform(colOut, colIn);
-      for (let y = 0; y < H; y++) {
-        re[y * W + x] = colOut[y * 2]!;
-        im[y * W + x] = colOut[y * 2 + 1]!;
-      }
+/** 前向 Neumann 梯度：最右/最下边界的导数定义为 0。 */
+export function neumannGradient(
+  values: Float64Array,
+  width: number,
+  height: number,
+  horizontal: Float64Array,
+  vertical: Float64Array,
+): void {
+  checkGrid(width, height, values);
+  if (horizontal.length !== values.length || vertical.length !== values.length) {
+    throw new Error('Neumann 梯度工作区长度不匹配');
+  }
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      horizontal[i] = x + 1 < width ? values[i + 1]! - values[i]! : 0;
+      vertical[i] = y + 1 < height ? values[i + width]! - values[i]! : 0;
     }
   }
-
-  return {
-    fft2: (re: Float64Array, im: Float64Array) => pass2d(re, im, true),
-    ifft2: (re: Float64Array, im: Float64Array) => pass2d(re, im, false),
-  };
 }
 
-function pow2ceil(n: number): number {
-  let p = 1;
-  while (p < n) p <<= 1;
-  return p;
+/** D^T 的一致伴随（即负散度）：外边界没有来自网格外的通量。 */
+export function neumannNegativeDivergence(
+  horizontal: Float64Array,
+  vertical: Float64Array,
+  width: number,
+  height: number,
+  out: Float64Array,
+): void {
+  if (!Number.isInteger(width) || width < 1 || !Number.isInteger(height) || height < 1) {
+    throw new Error('Neumann 网格 width/height 必须为正整数');
+  }
+  if (horizontal.length !== width * height || vertical.length !== width * height || out.length !== width * height) {
+    throw new Error('Neumann 散度工作区长度不匹配');
+  }
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      const fromLeft = x > 0 ? horizontal[i - 1]! : 0;
+      const fromAbove = y > 0 ? vertical[i - width]! : 0;
+      const outgoing = (x + 1 < width ? horizontal[i]! : 0) + (y + 1 < height ? vertical[i]! : 0);
+      out[i] = fromLeft + fromAbove - outgoing;
+    }
+  }
+}
+
+/** A = I + beta * D^T D 的非周期 Neumann 线性系统算子。 */
+export function applyNeumannSystem(
+  values: Float64Array,
+  width: number,
+  height: number,
+  beta: number,
+  out: Float64Array,
+): void {
+  checkGrid(width, height, values);
+  if (!Number.isFinite(beta) || beta < 0) throw new Error('Neumann beta 必须为有限非负数');
+  if (out.length !== values.length) throw new Error('Neumann 算子工作区长度不匹配');
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      let value = values[i]!;
+      if (x > 0) value += beta * (values[i]! - values[i - 1]!);
+      if (x + 1 < width) value += beta * (values[i]! - values[i + 1]!);
+      if (y > 0) value += beta * (values[i]! - values[i - width]!);
+      if (y + 1 < height) value += beta * (values[i]! - values[i + width]!);
+      out[i] = value;
+    }
+  }
+}
+
+function neumannDiagonal(width: number, height: number, x: number, y: number, beta: number): number {
+  const degree = (x > 0 ? 1 : 0) + (x + 1 < width ? 1 : 0) + (y > 0 ? 1 : 0) + (y + 1 < height ? 1 : 0);
+  return 1 + beta * degree;
+}
+
+function dot(a: Float64Array, b: Float64Array): number {
+  let value = 0;
+  for (let i = 0; i < a.length; i++) value += a[i]! * b[i]!;
+  return value;
 }
 
 /**
- * L0 平滑。图像先归一化到 0..1（与参考实现一致），参数含义相同：
- * lam 梯度稀疏权重（默认 0.02；0.005 为弱档），betaMax 收敛强度（默认 1e5），betaRate 倍率（默认 2）。
- * 非幂尺寸在内部做边缘复制 padding，输出裁回原尺寸。
+ * 确定性 Jacobi-PCG 求解 (I + beta D^T D)x = rhs。
+ * solution 既是可选初值也是输出；工作数组由调用方复用，避免按通道重复分配。
+ */
+export function solveNeumannSystem(
+  rhs: Float64Array,
+  width: number,
+  height: number,
+  beta: number,
+  solution: Float64Array,
+  residualWork: Float64Array,
+  directionWork: Float64Array,
+  operatorWork: Float64Array,
+  preconditionedWork: Float64Array,
+  options: { maxIterations?: number; tolerance?: number } = {},
+): NeumannSolveStats {
+  checkGrid(width, height, rhs);
+  if (solution.length !== rhs.length || residualWork.length !== rhs.length || directionWork.length !== rhs.length || operatorWork.length !== rhs.length || preconditionedWork.length !== rhs.length) {
+    throw new Error('Neumann PCG 工作区长度不匹配');
+  }
+  if (!Number.isFinite(beta) || beta < 0) throw new Error('Neumann beta 必须为有限非负数');
+  const maxIterations = options.maxIterations ?? 200;
+  const relativeTolerance = options.tolerance ?? 1e-8;
+  if (!Number.isInteger(maxIterations) || maxIterations < 1) throw new Error('Neumann PCG 最大迭代次数无效');
+  if (!Number.isFinite(relativeTolerance) || relativeTolerance <= 0) throw new Error('Neumann PCG 收敛容差无效');
+
+  applyNeumannSystem(solution, width, height, beta, operatorWork);
+  for (let i = 0; i < rhs.length; i++) residualWork[i] = rhs[i]! - operatorWork[i]!;
+  const rhsNorm = Math.sqrt(dot(rhs, rhs));
+  const tolerance = relativeTolerance * Math.max(1, rhsNorm);
+  let residualNorm = Math.sqrt(dot(residualWork, residualWork));
+  if (!Number.isFinite(residualNorm)) throw new Error('L0 Neumann PCG 初始残差不是有限数');
+  if (residualNorm <= tolerance) return { iterations: 0, residual: residualNorm, tolerance };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      preconditionedWork[i] = residualWork[i]! / neumannDiagonal(width, height, x, y, beta);
+      directionWork[i] = preconditionedWork[i]!;
+    }
+  }
+  let rz = dot(residualWork, preconditionedWork);
+  if (!(rz > 0) || !Number.isFinite(rz)) throw new Error('L0 Neumann PCG 预条件残差无效');
+
+  for (let iteration = 1; iteration <= maxIterations; iteration++) {
+    applyNeumannSystem(directionWork, width, height, beta, operatorWork);
+    const denominator = dot(directionWork, operatorWork);
+    if (!(denominator > 0) || !Number.isFinite(denominator)) {
+      throw new Error(`L0 Neumann PCG 算子失效（迭代 ${iteration}）`);
+    }
+    const step = rz / denominator;
+    for (let i = 0; i < rhs.length; i++) {
+      solution[i] = solution[i]! + step * directionWork[i]!;
+      residualWork[i] = residualWork[i]! - step * operatorWork[i]!;
+    }
+    residualNorm = Math.sqrt(dot(residualWork, residualWork));
+    if (!Number.isFinite(residualNorm)) throw new Error(`L0 Neumann PCG 残差不是有限数（迭代 ${iteration}）`);
+    if (residualNorm <= tolerance) return { iterations: iteration, residual: residualNorm, tolerance };
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        preconditionedWork[i] = residualWork[i]! / neumannDiagonal(width, height, x, y, beta);
+      }
+    }
+    const nextRz = dot(residualWork, preconditionedWork);
+    if (!(nextRz > 0) || !Number.isFinite(nextRz)) {
+      throw new Error(`L0 Neumann PCG 预条件残差无效（迭代 ${iteration}）`);
+    }
+    const directionScale = nextRz / rz;
+    for (let i = 0; i < rhs.length; i++) directionWork[i] = preconditionedWork[i]! + directionScale * directionWork[i]!;
+    rz = nextRz;
+  }
+
+  throw new Error(`L0 Neumann PCG 未收敛：残差 ${residualNorm}，容差 ${tolerance}，上限 ${maxIterations} 次`);
+}
+
+/**
+ * L0 平滑。图像归一化到 0..1；半二次外循环中的线性子问题使用
+ * 非周期 Neumann 梯度/伴随散度和 Jacobi-PCG。尺寸不做 2 次幂 padding。
  */
 export function l0Smooth(
   img: RgbaImage,
@@ -77,114 +205,113 @@ export function l0Smooth(
   const lam = opts.lam ?? 0.02;
   const betaMax = opts.betaMax ?? 1e5;
   const betaRate = opts.betaRate ?? 2.0;
+  if (!Number.isFinite(lam) || lam <= 0) throw new Error('lam 必须为有限正数');
+  if (!Number.isFinite(betaMax) || betaMax <= 0) throw new Error('betaMax 必须为有限正数');
+  if (!Number.isFinite(betaRate) || betaRate <= 1) throw new Error('betaRate 必须为大于 1 的有限数');
+  if (!Number.isInteger(img.width) || img.width < 1 || !Number.isInteger(img.height) || img.height < 1) {
+    throw new Error('image width/height 必须为正整数');
+  }
+  if (img.data.length !== img.width * img.height * 4) throw new Error('image data 长度不匹配');
 
-  const W0 = img.width;
-  const H0 = img.height;
-  const W = pow2ceil(W0);
-  const H = pow2ceil(H0);
-  const fft2 = makeFFT2(W, H);
-  const N = W * H;
+  const width = img.width;
+  const height = img.height;
+  const pixels = width * height;
+  const estimatedBytes = pixels * WORK_BYTES_PER_PIXEL;
+  if (estimatedBytes > MAX_L0_MEMORY_BYTES) {
+    const estimatedMiB = estimatedBytes / (1024 * 1024);
+    const budgetMiB = MAX_L0_MEMORY_BYTES / (1024 * 1024);
+    throw new Error(`L0 Neumann 工作区估算 ${estimatedMiB.toFixed(1)} MiB 超过 ${budgetMiB.toFixed(0)} MiB 上限（${pixels} 像素）；请改用 guided`);
+  }
 
-  // 打包 3 通道到 0..1（边缘复制 padding 到 2 的幂）
-  const ch = [new Float64Array(N), new Float64Array(N), new Float64Array(N)];
-  for (let y = 0; y < H; y++) {
-    const sy = Math.min(y, H0 - 1);
-    for (let x = 0; x < W; x++) {
-      const sx = Math.min(x, W0 - 1);
-      const o = (sy * W0 + sx) * 4;
-      ch[0]![y * W + x] = img.data[o]! / 255;
-      ch[1]![y * W + x] = img.data[o + 1]! / 255;
-      ch[2]![y * W + x] = img.data[o + 2]! / 255;
+  const input = [new Float64Array(pixels), new Float64Array(pixels), new Float64Array(pixels)];
+  const smooth = [new Float64Array(pixels), new Float64Array(pixels), new Float64Array(pixels)];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const o = i * 4;
+      const r = img.data[o]! / 255;
+      const g = img.data[o + 1]! / 255;
+      const b = img.data[o + 2]! / 255;
+      input[0]![i] = r; input[1]![i] = g; input[2]![i] = b;
+      smooth[0]![i] = r; smooth[1]![i] = g; smooth[2]![i] = b;
     }
   }
 
-  // F_denom = |fft2(dx)|² + |fft2(dy)|²（中心差分核，位置与参考实现一致）
-  const dxK = new Float64Array(N);
-  const dxI = new Float64Array(N);
-  const dyK = new Float64Array(N);
-  const dyI = new Float64Array(N);
-  dxK[(H / 2) * W + (W / 2 - 1)] = -1;
-  dxK[(H / 2) * W + W / 2] = 1;
-  dyK[((H / 2) - 1) * W + W / 2] = -1;
-  dyK[(H / 2) * W + W / 2] = 1;
-  fft2.fft2(dxK, dxI);
-  fft2.fft2(dyK, dyI);
-  const denomRe = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    denomRe[i] = dxK[i]! * dxK[i]! + dxI[i]! * dxI[i]! + dyK[i]! * dyK[i]! + dyI[i]! * dyI[i]!;
-  }
-  denomRe[0] = 1; // 核的频谱在 [0,0] 处为 0，除法前置 1
+  // Float32 足以保存分裂变量（其范围为输入差分的有限倍数），节省大图内存。
+  const horizontal = [new Float32Array(pixels), new Float32Array(pixels), new Float32Array(pixels)];
+  const vertical = [new Float32Array(pixels), new Float32Array(pixels), new Float32Array(pixels)];
+  const rhs = new Float64Array(pixels);
+  const residual = new Float64Array(pixels);
+  const direction = new Float64Array(pixels);
+  const operator = new Float64Array(pixels);
+  const preconditioned = new Float64Array(pixels);
+  const gradH = new Float64Array(pixels);
+  const gradV = new Float64Array(pixels);
+  let beta = lam * 2;
+  const maxOuterIterations = 30;
 
-  // F_I（每通道一次）
-  const FIre = [new Float64Array(N), new Float64Array(N), new Float64Array(N)];
-  const FIim = [new Float64Array(N), new Float64Array(N), new Float64Array(N)];
-  for (let c = 0; c < 3; c++) {
-    FIre[c]!.set(ch[c]!);
-    fft2.fft2(FIre[c]!, FIim[c]!);
-  }
-
-  // 半二次分裂迭代
-  let beta = lam * 2.0;
-  const hvRe = new Float64Array(N);
-  const hvIm = new Float64Array(N);
-  const S = ch;
-  const maxIter = 30;
-  for (let it = 0; it < maxIter; it++) {
-    // hp/vp = 循环前向差分；mask: Σ_c(hp²+vp²) < lam/beta → 置零
-    const zero = new Uint8Array(N);
-    for (let y = 0; y < H; y++) {
-      const yn = (y + 1) % H;
-      for (let x = 0; x < W; x++) {
-        const xn = (x + 1) % W;
-        const i = y * W + x;
-        let sum = 0;
-        for (let c = 0; c < 3; c++) {
-          const dh = S[c]![y * W + xn]! - S[c]![i]!;
-          const dv = S[c]![yn * W + x]! - S[c]![i]!;
-          sum += dh * dh + dv * dv;
-        }
-        if (sum < lam / beta) zero[i] = 1;
-      }
-    }
-    // hv = 循环反向差分的负散度
+  for (let outer = 0; outer < maxOuterIterations; outer++) {
+    const threshold = lam / beta;
     for (let c = 0; c < 3; c++) {
-      hvRe.fill(0);
-      hvIm.fill(0);
-      const Sc = S[c]!;
-      for (let y = 0; y < H; y++) {
-        const yp = (y - 1 + H) % H;
-        for (let x = 0; x < W; x++) {
-          const xp = (x - 1 + W) % W;
-          const i = y * W + x;
-          if (zero[i]) continue;
-          hvRe[i] = (Sc[y * W + xp]! - Sc[i]!) + (Sc[yp * W + x]! - Sc[i]!);
+      neumannGradient(smooth[c]!, width, height, gradH, gradV);
+      horizontal[c]!.set(gradH);
+      vertical[c]!.set(gradV);
+    }
+    for (let i = 0; i < pixels; i++) {
+      let magnitudeSquared = 0;
+      for (let c = 0; c < 3; c++) magnitudeSquared += horizontal[c]![i]! * horizontal[c]![i]! + vertical[c]![i]! * vertical[c]![i]!;
+      if (magnitudeSquared < threshold) {
+        for (let c = 0; c < 3; c++) {
+          horizontal[c]![i] = 0;
+          vertical[c]![i] = 0;
         }
       }
-      fft2.fft2(hvRe, hvIm);
-      // S_c = Re(ifft2((F_I + β·fft2(hv)) / (1 + β·denom)))
-      const re = FIre[c]!;
-      const im = FIim[c]!;
-      for (let i = 0; i < N; i++) {
-        const d = 1 + beta * denomRe[i]!;
-        re[i] = (re[i]! + beta * hvRe[i]!) / d;
-        im[i] = (im[i]! + beta * hvIm[i]!) / d;
-      }
-      fft2.ifft2(re, im);
     }
+
+    for (let c = 0; c < 3; c++) {
+      const h = horizontal[c]!;
+      const v = vertical[c]!;
+      for (let y = 0; y < height; y++) {
+        const row = y * width;
+        for (let x = 0; x < width; x++) {
+          const i = row + x;
+          const fromLeft = x > 0 ? h[i - 1]! : 0;
+          const fromAbove = y > 0 ? v[i - width]! : 0;
+          const outgoing = (x + 1 < width ? h[i]! : 0) + (y + 1 < height ? v[i]! : 0);
+          rhs[i] = input[c]![i]! + beta * (fromLeft + fromAbove - outgoing);
+        }
+      }
+      solveNeumannSystem(rhs, width, height, beta, smooth[c]!, residual, direction, operator, preconditioned, {
+        maxIterations: 200,
+        tolerance: 1e-8,
+      });
+    }
+
     beta *= betaRate;
     if (beta > betaMax) break;
   }
 
-  // 写回（裁掉 padding，clamp 到 0..255）
   const out = new Uint8ClampedArray(img.data);
-  for (let y = 0; y < H0; y++) {
-    for (let x = 0; x < W0; x++) {
-      const i = y * W + x;
-      const o = (y * W0 + x) * 4;
-      out[o] = Math.round(Math.min(1, Math.max(0, S[0]![i]!)) * 255);
-      out[o + 1] = Math.round(Math.min(1, Math.max(0, S[1]![i]!)) * 255);
-      out[o + 2] = Math.round(Math.min(1, Math.max(0, S[2]![i]!)) * 255);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const o = i * 4;
+      out[o] = Math.round(Math.min(1, Math.max(0, smooth[0]![i]!)) * 255);
+      out[o + 1] = Math.round(Math.min(1, Math.max(0, smooth[1]![i]!)) * 255);
+      out[o + 2] = Math.round(Math.min(1, Math.max(0, smooth[2]![i]!)) * 255);
     }
   }
-  return { width: W0, height: H0, data: out };
+  return { width, height, data: out };
 }
+
+export const l0MemoryBudget = {
+  maxBytes: MAX_L0_MEMORY_BYTES,
+  bytesPerPixel: WORK_BYTES_PER_PIXEL,
+  maxPixels: MAX_L0_PIXELS,
+  float64ArraysPerPixel: FLOAT64_ARRAYS_PER_PIXEL,
+  float32ArraysPerPixel: FLOAT32_ARRAYS_PER_PIXEL,
+  uint8ArraysPerPixel: UINT8_ARRAYS_PER_PIXEL,
+  uint8ElementsPerPixel: UINT8_ELEMENTS_PER_PIXEL,
+  estimatedBytes: WORK_BYTES_PER_PIXEL,
+  estimatedMiB: WORK_BYTES_PER_PIXEL / (1024 * 1024),
+};

@@ -85,51 +85,47 @@ function gaussianWeights(sigma: number): { weights: number[]; radius: number } {
  * 只对不透明像素加权平均（避免透明边缘渗入 RGB），输出保留原 alpha。
  * @param sigma 高斯标准差（像素）；<=0 返回原图
  */
-export function gaussianBlur(img: RgbaImage, sigma: number): RgbaImage {
-  if (!(sigma > 0)) return img;
+export function gaussianBlur(img: RgbaImage, sigma: number, coverage?: Float32Array): RgbaImage {
+  if (!Number.isFinite(sigma) || sigma > 64) throw new Error('sigma 必须为 finite 且不超过 64');
+  if (sigma <= 0) return img;
   const { width: W, height: H, data } = img;
   const { weights, radius } = gaussianWeights(sigma);
   const n = W * H;
 
+  if (coverage && coverage.length !== n) throw new Error('coverage 长度不匹配');
   const opaque = new Uint8Array(n);
   const src = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    opaque[i] = (data[i * 4 + 3] as number) >= 128 ? 1 : 0;
+    const coverageValue = coverage?.[i] ?? 1;
+    if (!Number.isFinite(coverageValue) || coverageValue < 0 || coverageValue > 1) throw new Error('coverage 必须为 0..1 的有限数');
+    opaque[i] = coverageValue > 0 ? 1 : 0;
     src[i * 3] = data[i * 4] as number;
     src[i * 3 + 1] = data[i * 4 + 1] as number;
     src[i * 3 + 2] = data[i * 4 + 2] as number;
   }
 
-  // 水平 pass
-  const hpass = new Float32Array(n * 3);
+  // Separable weighted convolution: keep numerator and local weight separate
+  // through both passes, then normalize once. This preserves straight RGB.
+  const hNumerator = new Float32Array(n * 3);
+  const hWeight = new Float32Array(n);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      let sr = 0, sg = 0, sb = 0, c = 0;
+      const i = y * W + x;
       for (let k = -radius; k <= radius; k++) {
         const nx = x + k;
         if (nx < 0 || nx >= W) continue;
         const j = y * W + nx;
         if (!opaque[j]) continue;
-        const w = weights[k + radius] as number;
-        sr += src[j * 3]! * w;
-        sg += src[j * 3 + 1]! * w;
-        sb += src[j * 3 + 2]! * w;
-        c += w;
-      }
-      const i = y * W + x;
-      if (c > 0) {
-        hpass[i * 3] = sr / c;
-        hpass[i * 3 + 1] = sg / c;
-        hpass[i * 3 + 2] = sb / c;
-      } else {
-        hpass[i * 3] = src[i * 3]!;
-        hpass[i * 3 + 1] = src[i * 3 + 1]!;
-        hpass[i * 3 + 2] = src[i * 3 + 2]!;
+        const w = (weights[k + radius] as number) * (coverage?.[j] ?? 1);
+        hWeight[i]! += w;
+        hNumerator[i * 3]! += src[j * 3]! * w;
+        hNumerator[i * 3 + 1]! += src[j * 3 + 1]! * w;
+        hNumerator[i * 3 + 2]! += src[j * 3 + 2]! * w;
       }
     }
   }
 
-  // 垂直 pass + 写回
+  // Vertical pass + one local normalization.
   const out = new Uint8ClampedArray(n * 4);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -138,12 +134,11 @@ export function gaussianBlur(img: RgbaImage, sigma: number): RgbaImage {
         const ny = y + k;
         if (ny < 0 || ny >= H) continue;
         const j = ny * W + x;
-        if (!opaque[j]) continue;
         const w = weights[k + radius] as number;
-        sr += hpass[j * 3]! * w;
-        sg += hpass[j * 3 + 1]! * w;
-        sb += hpass[j * 3 + 2]! * w;
-        c += w;
+        c += hWeight[j]! * w;
+        sr += hNumerator[j * 3]! * w;
+        sg += hNumerator[j * 3 + 1]! * w;
+        sb += hNumerator[j * 3 + 2]! * w;
       }
       const i = (y * W + x) * 4;
       if (c > 0) {

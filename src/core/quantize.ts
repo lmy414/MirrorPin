@@ -1,7 +1,14 @@
 // K-Means++ 减色量化：把一组像素颜色聚成 k 个代表色。
 // 用于评审文档 4.1 管线第一步的降色；K 值由调用方按色域/色号上限给出。
 
-import type { RGB } from './types';
+import type { PipelineDiagnostics, RGB } from './types';
+import { requireInteger, requirePositiveInteger } from './options';
+
+/** @internal 压缩后的颜色样本及其原始出现频率。 */
+export interface WeightedRgbSample {
+  color: RGB;
+  weight: number;
+}
 
 /** 确定性伪随机（mulberry32），保证量化结果可复现、可测试 */
 export function mulberry32(seed: number): () => number {
@@ -15,6 +22,14 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+function rgbKey(color: RGB): number {
+  return (color.r << 16) | (color.g << 8) | color.b;
+}
+
+function compareRgb(a: RGB, b: RGB): number {
+  return a.r - b.r || a.g - b.g || a.b - b.b;
+}
+
 function sqDist(a: RGB, b: RGB): number {
   const dr = a.r - b.r;
   const dg = a.g - b.g;
@@ -22,134 +37,245 @@ function sqDist(a: RGB, b: RGB): number {
   return dr * dr + dg * dg + db * db;
 }
 
+function compressWeightedSamples(pixels: readonly RGB[]): WeightedRgbSample[] {
+  const countByKey = new Map<number, number>();
+  for (const pixel of pixels) {
+    const key = rgbKey(pixel);
+    countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
+  }
+  return [...countByKey.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([key, weight]) => ({
+      color: { r: (key >> 16) & 255, g: (key >> 8) & 255, b: key & 255 },
+      weight,
+    }));
+}
+
+function assignSamples(
+  samples: readonly WeightedRgbSample[],
+  centers: readonly RGB[],
+): { assignment: Int32Array; weightedError: Float64Array; changedFrom?: Int32Array } {
+  const assignment = new Int32Array(samples.length);
+  const weightedError = new Float64Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i]!;
+    let best = 0;
+    let bestDistance = sqDist(sample.color, centers[0]!);
+    for (let c = 1; c < centers.length; c++) {
+      const distance = sqDist(sample.color, centers[c]!);
+      if (distance < bestDistance) {
+        best = c;
+        bestDistance = distance;
+      }
+    }
+    assignment[i] = best;
+    weightedError[i] = bestDistance * sample.weight;
+  }
+  return { assignment, weightedError };
+}
+
+/**
+ * @internal 在同一次完整分配状态上为空簇选择互不重复的高 weighted-error 样本。
+ * 不修改 assignment；调用方在下一轮用恢复后的中心自然重分配。
+ */
+export function recoverEmptyCenters(
+  samples: readonly WeightedRgbSample[],
+  centers: readonly RGB[],
+  assignment: Int32Array,
+  emptyClusters: readonly number[],
+): RGB[] {
+  if (assignment.length !== samples.length) throw new Error('assignment 长度必须等于 samples 长度');
+  const ranked = samples.map((sample, index) => {
+    const owner = assignment[index]!;
+    if (owner < 0 || owner >= centers.length) throw new Error('assignment 包含非法簇索引');
+    return {
+      index,
+      score: sqDist(sample.color, centers[owner]!) * sample.weight,
+      key: rgbKey(sample.color),
+    };
+  }).sort((a, b) => b.score - a.score || a.key - b.key || a.index - b.index);
+
+  const used = new Set<number>();
+  return emptyClusters.map(() => {
+    const candidate = ranked.find((entry) => !used.has(entry.index));
+    if (!candidate) throw new Error('没有足够样本恢复空簇');
+    used.add(candidate.index);
+    return { ...samples[candidate.index]!.color };
+  });
+}
+
 /**
  * 将像素颜色聚成 k 个代表色（RGB 空间）。
- * 返回的中心数为 min(k, 去重像素数)。样本不足时退回去重集合。
- * @param pixels 颜色样本（可重复）
- * @param k 目标聚数（>= 1）
- * @param seed 随机种子（可选，默认固定，便于测试）
+ * 完整 RGB key 排序压缩保证输入排列无关；最终中心也按 RGB 稳定规范排序。
  */
-export function kmeansPalette(pixels: RGB[], k: number, seed = 42): RGB[] {
-  if (k < 1) throw new Error('k 必须 >= 1');
+export function kmeansPalette(pixels: readonly RGB[], k: number, seed = 42): RGB[] {
+  requirePositiveInteger('k', k);
+  requireInteger('seed', seed);
   if (pixels.length === 0) return [];
 
-  // 去重，得到唯一色集合（聚类的第一次数据缩减，也避免空簇兜底时取到重复样本）
-  const uniq: RGB[] = [];
-  const seen = new Set<number>();
-  for (const p of pixels) {
-    const key = (p.r << 16) | (p.g << 8) | p.b;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniq.push(p);
-    }
-  }
-  if (uniq.length <= k) return uniq;
+  const samples = compressWeightedSamples(pixels);
+  if (samples.length <= k) return samples.map((sample) => sample.color).sort(compareRgb);
 
   const rnd = mulberry32(seed);
-  const data = uniq;
-  const n = data.length;
+  let firstTarget = rnd() * pixels.length;
+  let first = samples.length - 1;
+  for (let i = 0; i < samples.length; i++) {
+    firstTarget -= samples[i]!.weight;
+    if (firstTarget <= 0) {
+      first = i;
+      break;
+    }
+  }
+  let centers: RGB[] = [{ ...samples[first]!.color }];
 
-  // ---- K-Means++ 初始化 ----
-  const centers: RGB[] = [];
-  centers.push(data[Math.floor(rnd() * n)] as RGB);
-  const closestDist = new Float64Array(n);
+  const closestDistance = new Float64Array(samples.length);
   while (centers.length < k) {
-    let sum = 0;
-    let farthest = -1;
-    let farthestDist = 0;
-    for (let i = 0; i < n; i++) {
-      let d = Infinity;
-      for (let c = 0; c < centers.length; c++) {
-        d = Math.min(d, sqDist(data[i] as RGB, centers[c] as RGB));
-      }
-      closestDist[i] = d;
-      sum += d;
-      if (d > farthestDist) {
-        farthestDist = d;
-        farthest = i;
+    let total = 0;
+    let fallback = 0;
+    let fallbackScore = -1;
+    for (let i = 0; i < samples.length; i++) {
+      let distance = Infinity;
+      for (const center of centers) distance = Math.min(distance, sqDist(samples[i]!.color, center));
+      closestDistance[i] = distance;
+      const score = distance * samples[i]!.weight;
+      total += score;
+      if (score > fallbackScore) {
+        fallbackScore = score;
+        fallback = i;
       }
     }
-    // 全 0 距离时退化，直接取最远像素作为新中心
-    if (sum === 0) {
-      centers.push(data[farthest] as RGB);
+    if (total <= 0) {
+      centers.push({ ...samples[fallback]!.color });
       continue;
     }
-    // 按 D² 权重抽样
-    let target = rnd() * sum;
-    let chosen = n - 1;
-    for (let i = 0; i < n; i++) {
-      target -= closestDist[i] as number;
+    let target = rnd() * total;
+    let chosen = samples.length - 1;
+    for (let i = 0; i < samples.length; i++) {
+      target -= closestDistance[i]! * samples[i]!.weight;
       if (target <= 0) {
         chosen = i;
         break;
       }
     }
-    centers.push(data[chosen] as RGB);
+    centers.push({ ...samples[chosen]!.color });
   }
 
-  // ---- Lloyd 迭代 ----
-  const assign = new Int32Array(n);
-  const sums = new Float64Array(k * 3);
-  const counts = new Int32Array(k);
-  const maxIter = 25;
-  for (let iter = 0; iter < maxIter; iter++) {
-    let changed = false;
-    for (let i = 0; i < n; i++) {
-      const p = data[i] as RGB;
-      let bestC = 0;
-      let bestD = sqDist(p, centers[0] as RGB);
-      for (let c = 1; c < k; c++) {
-        const d = sqDist(p, centers[c] as RGB);
-        if (d < bestD) {
-          bestD = d;
-          bestC = c;
-        }
-      }
-      if (assign[i] !== bestC) {
-        assign[i] = bestC;
-        changed = true;
-      }
+  let previousAssignment: Int32Array | undefined;
+  for (let iter = 0; iter < 25; iter++) {
+    const { assignment } = assignSamples(samples, centers);
+    const sums = new Float64Array(k * 3);
+    const counts = new Float64Array(k);
+    for (let i = 0; i < samples.length; i++) {
+      const cluster = assignment[i]!;
+      const sample = samples[i]!;
+      const offset = cluster * 3;
+      sums[offset] = sums[offset]! + sample.color.r * sample.weight;
+      sums[offset + 1] = sums[offset + 1]! + sample.color.g * sample.weight;
+      sums[offset + 2] = sums[offset + 2]! + sample.color.b * sample.weight;
+      counts[cluster] = counts[cluster]! + sample.weight;
     }
-    if (!changed) break;
 
-    sums.fill(0);
-    counts.fill(0);
-    for (let i = 0; i < n; i++) {
-      const c = assign[i] as number;
-      const p = data[i] as RGB;
-      const ci = c * 3;
-      sums[ci] = sums[ci]! + p.r;
-      sums[ci + 1] = sums[ci + 1]! + p.g;
-      sums[ci + 2] = sums[ci + 2]! + p.b;
-      counts[c] = counts[c]! + 1;
-    }
+    const nextCenters = new Array<RGB>(k);
+    const emptyClusters: number[] = [];
     for (let c = 0; c < k; c++) {
-      if (counts[c] === 0) {
-        // 空簇：暴力替换为距其最远的已有点，保证 k 个非空中心
-        let farI = 0;
-        let farD = -1;
-        const center = centers[c] as RGB;
-        for (let i = 0; i < n; i++) {
-          const d = sqDist(data[i] as RGB, center);
-          if (d > farD) {
-            farD = d;
-            farI = i;
-          }
-        }
-        centers[c] = { ...(data[farI] as RGB) };
+      if (counts[c]! === 0) {
+        emptyClusters.push(c);
       } else {
-        centers[c] = {
+        nextCenters[c] = {
           r: sums[c * 3]! / counts[c]!,
           g: sums[c * 3 + 1]! / counts[c]!,
           b: sums[c * 3 + 2]! / counts[c]!,
         };
       }
     }
+    if (emptyClusters.length > 0) {
+      const recovered = recoverEmptyCenters(samples, centers, assignment, emptyClusters);
+      for (let i = 0; i < emptyClusters.length; i++) nextCenters[emptyClusters[i]!] = recovered[i]!;
+    }
+
+    let stable = previousAssignment !== undefined;
+    if (stable) {
+      for (let i = 0; i < assignment.length; i++) {
+        if (assignment[i] !== previousAssignment![i]) {
+          stable = false;
+          break;
+        }
+      }
+    }
+    centers = nextCenters;
+    previousAssignment = assignment;
+    if (stable && emptyClusters.length === 0) break;
   }
 
-  return centers.map((c) => ({
-    r: Math.round(c.r),
-    g: Math.round(c.g),
-    b: Math.round(c.b),
-  }));
+  return centers.map((center) => ({
+    r: Math.round(center.r),
+    g: Math.round(center.g),
+    b: Math.round(center.b),
+  })).sort(compareRgb);
+}
+
+export function measureSpatialFragmentation(
+  labels: ArrayLike<number>,
+  width: number,
+  height: number,
+): PipelineDiagnostics {
+  requirePositiveInteger('width', width);
+  requirePositiveInteger('height', height);
+  if (labels.length !== width * height) throw new Error('labels 长度必须等于 width * height');
+
+  const visited = new Uint8Array(labels.length);
+  const queue = new Int32Array(labels.length);
+  let componentCount = 0;
+  let singletonComponentCount = 0;
+  let boundaryCount = 0;
+  let adjacencyCount = 0;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = y * width + x;
+      if (x + 1 < width) {
+        adjacencyCount++;
+        if (labels[pixel] !== labels[pixel + 1]) boundaryCount++;
+      }
+      if (y + 1 < height) {
+        adjacencyCount++;
+        if (labels[pixel] !== labels[pixel + width]) boundaryCount++;
+      }
+      if (visited[pixel]) continue;
+
+      componentCount++;
+      const label = labels[pixel];
+      let head = 0;
+      let tail = 0;
+      let size = 0;
+      visited[pixel] = 1;
+      queue[tail++] = pixel;
+      while (head < tail) {
+        const current = queue[head++]!;
+        size++;
+        const cx = current % width;
+        const cy = (current - cx) / width;
+        if (cx > 0) visit(current - 1);
+        if (cx + 1 < width) visit(current + 1);
+        if (cy > 0) visit(current - width);
+        if (cy + 1 < height) visit(current + width);
+      }
+      if (size === 1) singletonComponentCount++;
+
+      function visit(next: number): void {
+        if (visited[next] || labels[next] !== label) return;
+        visited[next] = 1;
+        queue[tail++] = next;
+      }
+    }
+  }
+
+  return {
+    componentCount,
+    singletonComponentCount,
+    singletonRatio: componentCount > 0 ? singletonComponentCount / componentCount : 0,
+    boundaryCount,
+    adjacencyCount,
+    boundaryRatio: adjacencyCount > 0 ? boundaryCount / adjacencyCount : 0,
+  };
 }

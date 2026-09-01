@@ -10,3 +10,5 @@ webapp/app/algo.mjs
 webapp/app/algo.mjs.map
 webapp/app/algo.worker.mjs
 webapp/app/algo.worker.mjs.map
+minitool-dist/
+minitool/assets/algo.js

@@ -7,12 +7,8 @@ import type { RgbaImage, Swatch, Grid } from '../src/core/types';
 import {
   MARD291,
   MARD221,
-  gaussianBlur,
-  kmeansPalette,
-  buildPalette,
-  nearestSwatch,
-  rgbToHex,
   generatePatternBead,
+  quantizeImage,
 } from '../src/index';
 import { renderPatternPng, countGridMaterials } from '../src/render/node';
 
@@ -30,13 +26,13 @@ const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
 
 选项:
   --max-side <n>          网格最大边长（另一边按比例），默认 64
-  --blur <sigma>          （兼容旧参，显式时覆盖 --smooth）高斯模糊强度
-  --no-blur               （兼容旧参）关闭平滑
+  --blur <sigma>          兼容旧别名；显式时启用高斯平滑并覆盖 --smooth（无默认 sigma）
+  --no-blur               兼容旧别名；显式时关闭平滑（未指定时实际默认 smooth=l0）
   --colors <n>            预处理降色数（0=不降色），默认 64
   --no-crop               关闭透明通道裁剪
   --max-colors <n>        最终色号上限（不限制则省略）
   --min-beads <n>         稀有色合并：用量 < n 的色号并入邻近色（0=不合并）
-  --remove-bg <none|flood> 网格级按颜色清纯背景，默认 none
+  --remove-bg <none|flood> 源图阶段安全置信度背景 flood，默认 none
   --despeckle             清理 <2 格的杂点
   --dither                抖动（照片渐变用，会导致色号增多）
   --board <n>             板界线间隔，默认 29
@@ -93,44 +89,7 @@ export function preprocess(
   img: RgbaImage,
   opts: { kColors: number },
 ): RgbaImage {
-  const blurred: RgbaImage = img;
-  if (!(opts.kColors > 0) || opts.kColors >= 256) return blurred;
-
-  const { width: W, height: H, data } = blurred;
-  const samples: { r: number; g: number; b: number }[] = [];
-  const step = 3;
-  for (let y = 0; y < H; y += step) {
-    for (let x = 0; x < W; x += step) {
-      const i = (y * W + x) * 4;
-      if (data[i + 3]! < 128) continue;
-      samples.push({ r: data[i]!, g: data[i + 1]!, b: data[i + 2]! });
-      if (samples.length >= 120000) break;
-    }
-  }
-  if (samples.length === 0) return blurred;
-
-  const centers = kmeansPalette(samples, Math.min(opts.kColors, samples.length));
-  const swatches = centers.map((c, i) => ({ code: String(i), hex: rgbToHex(c) }));
-  const entries = buildPalette(swatches);
-
-  const out = new Uint8ClampedArray(data);
-  const cache = new Map<number, string>();
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const i = (y * W + x) * 4;
-      if (data[i + 3]! < 128) continue;
-      const key = ((data[i]! >> 3) << 10) | ((data[i + 1]! >> 3) << 5) | (data[i + 2]! >> 3);
-      let hx = cache.get(key);
-      if (!hx) {
-        hx = nearestSwatch({ r: data[i]!, g: data[i + 1]!, b: data[i + 2]! }, entries).hex;
-        cache.set(key, hx);
-      }
-      out[i] = parseInt(hx.slice(0, 2), 16);
-      out[i + 1] = parseInt(hx.slice(2, 4), 16);
-      out[i + 2] = parseInt(hx.slice(4, 6), 16);
-    }
-  }
-  return { width: W, height: H, data: out };
+  return quantizeImage(img, opts.kColors);
 }
 
 export type PaletteName = 'mard291' | 'mard221';
@@ -287,12 +246,12 @@ export function parseArgs(argv: string[]): ConvertArgs {
 }
 
 export async function convert(img: RgbaImage, args: ConvertArgs, render: (g: Grid) => Promise<Buffer>): Promise<Grid> {
-  // --blur is legacy alias for --smooth gauss; preprocess no longer does blur (handled via BeadOptions.smooth)
-  const work = preprocess(img, { kColors: args.colors });
+  // --blur is legacy alias for --smooth gauss；颜色量化由统一 BeadOptions.colorQuantize 执行。
   const palette = args.palette === 'mard221' ? MARD221 : MARD291;
-  const grid = generatePatternBead(work, {
+  const grid = generatePatternBead(img, {
     palette: palette as readonly Swatch[],
     maxSide: args.maxSide,
+    colorQuantize: { colors: args.colors },
     cropToSubject: args.crop,
     removeBg: args.removeBg,
     despeckle: args.despeckle,
@@ -348,7 +307,11 @@ async function main() {
   if (args.materials) console.log(`材料清单: ${args.materials}`);
 }
 
-main().catch((e) => {
-  console.error('错误:', (e as Error).message);
-  process.exit(1);
-});
+const invokedAsCli = process.argv[1]?.replace(/\\/g, '/').endsWith('/cli/index.ts')
+  || process.argv[1]?.replace(/\\/g, '/').endsWith('/dist/cli.js');
+if (invokedAsCli) {
+  main().catch((e) => {
+    console.error('错误:', (e as Error).message);
+    process.exit(1);
+  });
+}

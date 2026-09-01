@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kmeansPalette } from '../src';
+import { kmeansPalette, recoverEmptyCenters } from '../src';
 import type { RGB } from '../src';
 
 describe('K-Means++ 减色', () => {
@@ -39,10 +39,74 @@ describe('K-Means++ 减色', () => {
     expect(kmeansPalette(pixels, 4)).toEqual(kmeansPalette(pixels, 4));
   });
 
-  it('k=1 时返回全局平均（近似）', () => {
-    const pixels = [...cluster([100, 200, 50], 10), ...cluster([150, 250, 100], 10)];
-    const [c] = kmeansPalette(pixels, 1);
-    expect(c!.r).toBeGreaterThanOrEqual(100);
-    expect(c!.r).toBeLessThanOrEqual(150);
+  it('同一颜色多重集合的 shuffled 输入返回完全一致且规范排序的中心', () => {
+    const pixels = [
+      ...cluster([240, 10, 20], 13),
+      ...cluster([15, 230, 40], 9),
+      ...cluster([20, 30, 220], 7),
+      ...cluster([180, 180, 30], 5),
+      ...cluster([70, 80, 90], 3),
+    ];
+    const shuffled = [...pixels].sort((a, b) => ((a.r * 17 + a.g * 31 + a.b * 13) % 19) - ((b.r * 17 + b.g * 31 + b.b * 13) % 19));
+    const expected = kmeansPalette(pixels, 3, 99);
+    expect(kmeansPalette(shuffled, 3, 99)).toEqual(expected);
+    expect(expected).toEqual([...expected].sort((a, b) => a.r - b.r || a.g - b.g || a.b - b.b));
+  });
+
+  it('k=1 按原始像素频率返回全局平均', () => {
+    const pixels = [...cluster([0, 0, 0], 9), ...cluster([255, 255, 255], 1)];
+    expect(kmeansPalette(pixels, 1)).toEqual([{ r: 26, g: 26, b: 26 }]);
+  });
+
+  it('少数色不会因去重而获得与多数色相同的权重', () => {
+    const pixels = [
+      ...cluster([0, 0, 0], 90),
+      ...cluster([100, 100, 100], 9),
+      ...cluster([255, 255, 255], 1),
+    ];
+    const centers = kmeansPalette(pixels, 2).sort((a, b) => a.r - b.r);
+    expect(centers[0]!.r).toBeLessThan(20);
+    expect(centers[1]!.r).toBeGreaterThanOrEqual(100);
+  });
+
+  it('拒绝非整数 k 与 seed', () => {
+    expect(() => kmeansPalette([{ r: 0, g: 0, b: 0 }], 1.5)).toThrow(/整数/);
+    expect(() => kmeansPalette([{ r: 0, g: 0, b: 0 }], 1, 1.5)).toThrow(/整数/);
+  });
+
+  it('空簇恢复一次性为多个空簇选择不同的 weighted-error 样本', () => {
+    const samples = [
+      { color: { r: 0, g: 0, b: 0 }, weight: 10 },
+      { color: { r: 80, g: 0, b: 0 }, weight: 3 },
+      { color: { r: 160, g: 0, b: 0 }, weight: 2 },
+      { color: { r: 255, g: 0, b: 0 }, weight: 1 },
+    ];
+    const centers = [
+      { r: 0, g: 0, b: 0 },
+      { r: 0, g: 0, b: 0 },
+      { r: 0, g: 0, b: 0 },
+    ];
+    const assignment = new Int32Array([0, 0, 0, 0]);
+    const recovered = recoverEmptyCenters(samples, centers, assignment, [1, 2]);
+    expect(recovered).toEqual([
+      { r: 255, g: 0, b: 0 },
+      { r: 160, g: 0, b: 0 },
+    ]);
+    expect(assignment).toEqual(new Int32Array([0, 0, 0, 0]));
+  });
+
+  it('空簇恢复后 kmeans 返回有限且互异的中心', () => {
+    const pixels = [
+      ...cluster([0, 0, 0], 50),
+      ...cluster([1, 1, 1], 1),
+      ...cluster([2, 2, 2], 1),
+      ...cluster([255, 255, 255], 50),
+    ];
+    const centers = kmeansPalette(pixels, 3, 7);
+    expect(centers).toHaveLength(3);
+    expect(new Set(centers.map((c) => `${c.r},${c.g},${c.b}`)).size).toBe(3);
+    for (const center of centers) {
+      expect(Number.isFinite(center.r + center.g + center.b)).toBe(true);
+    }
   });
 });

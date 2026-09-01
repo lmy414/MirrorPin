@@ -31,9 +31,12 @@
     "build": "tsup && npm run build:cli",
     "build:cli": "node scripts/build-cli.mjs",
     "test": "vitest run",
+    "test:regression": "vitest run --config vitest.regression.config.ts",
     "test:watch": "vitest",
     "prepare": "npm run build",
     "build:webapp": "node scripts/build-webapp.mjs",
+    "build:minitool": "node scripts/build-minitool.mjs",
+    "serve:minitool": "node scripts/serve-minitool.mjs",
     "serve:webapp": "node scripts/serve-webapp.mjs",
     "webapp": "npm run build:webapp && npm run serve:webapp"
   },

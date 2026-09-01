@@ -18,6 +18,41 @@ export interface RgbaImage {
   data: Uint8ClampedArray;
 }
 
+/** 统一 alpha 纳入策略：alpha >= threshold 视为有效颜色。 */
+export interface AlphaPolicy {
+  /** 0..255 的整数，默认 128。 */
+  threshold?: number;
+}
+
+/** 颜色量化选项；quantizeImage 也继续兼容直接传 colors 数字。 */
+export interface ColorQuantizeOptions {
+  /** 目标代表色数量；1..255 为启用，>=256 表示关闭。 */
+  colors: number;
+  /** 用于拟合色板的确定性硬样本上限，默认 120000。 */
+  sampleLimit?: number;
+  /** 确定性 k-means 随机种子，默认 42。 */
+  seed?: number;
+  /** 有效颜色的 alpha 策略。 */
+  alpha?: AlphaPolicy;
+}
+
+export interface ResolvedColorQuantizeOptions {
+  colors: number;
+  sampleLimit: number;
+  seed: number;
+  alpha: Required<AlphaPolicy>;
+}
+
+/** 基础空间碎色诊断，可由后续管线继续扩充。 */
+export interface PipelineDiagnostics {
+  componentCount: number;
+  singletonComponentCount: number;
+  singletonRatio: number;
+  boundaryCount: number;
+  adjacencyCount: number;
+  boundaryRatio: number;
+}
+
 /** 一枚拼豆色号 */
 export interface Swatch {
   /** 瓶身色号，如 A1 / B5 */

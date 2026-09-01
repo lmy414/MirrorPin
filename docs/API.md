@@ -42,30 +42,32 @@ const grid: Grid = generatePatternBead(image: RgbaImage, options: BeadOptions);
 | `fixed` | `{ w:number; h:number }` | — | 固定尺寸（此时按比例居中补透明） |
 | `fill` | `boolean` | — | 配合 `fixed` 按比例裁铺满整板 |
 | `cropToSubject` | `boolean` | `false` | 按透明通道裁主体 |
-| `removeBg` | `'none' \| 'flood'` | `'none'` | `flood` 时按颜色清纯背景 |
+| `removeBg` | `'none' \| 'flood'` | `'none'` | 源图阶段构建安全置信度前景 mask；不确定时退化为 alpha-only |
 | `backgroundTolerance` | `number` | `12` | flood 的 CIEDE2000 阈值 |
-| `smooth` | `'none' \| 'gauss' \| 'guided' \| 'l0'` | `none`（CLI 默认 `l0`） | 转像素前的保边平滑（`gauss` 用 `smoothSigma`，`guided` 用 `smoothRadius/smoothEps`，`l0` 用 `smoothLambda`） |
+| `smooth` | `'none' \| 'gauss' \| 'guided' \| 'l0'` | 库 `none`；board `guided`；CLI `l0` | 转像素前的保边平滑（`gauss` 用 `smoothSigma`，`guided` 用 `smoothRadius/smoothEps`，`l0` 用 `smoothLambda`） |
 | `smoothSigma` | `number` | `1` | gauss 的 σ |
-| `smoothLambda` | `number` | `0.02`（`l0soft` 为 0.005） | L0 的 λ |
+| `smoothLambda` | `number` | `0.02` | L0 的 λ；CLI 可用兼容别名 `l0soft` 采用 0.005 |
 | `smoothRadius` | `number` | `8` | 引导滤波窗口半径 |
 | `smoothEps` | `number` | `100`（0..255 尺度） | 引导滤波正则 |
-| `scale` | `'box' \| 'dpid'` | `box`（CLI 默认 `dpid`） | 降采样；`dpid` 仅 auto 网格生效 |
+| `scale` | `'box' \| 'dpid'` | 库 `box`；board/CLI `dpid` | auto/fixed/fill 均一次直接重采样到目标网格 |
 | `dpidLambda` | `number` | `1.0`（0 退化为 box） | DPID 细节权重指数 |
 | `despeckle` | `boolean` | `false` | 清理 <2 格的杂点 |
 | `dither` | `boolean` | `false` | Floyd–Steinberg 抖动 |
 | `maxColors` | `number` | — | 最终色号上限（限色） |
 | `minBeads` | `number` | `0` | 稀有色合并阈值（0/1=关） |
+| `diagnostics` | `BeadDiagnostics` | — | 测试/诊断输出；`resamplePasses` 来自实际重采样调用次数。 |
+| `onResample` | `(event) => void` | — | library-only 测试/诊断 hook；每次实际 fit/direct area/DPID 调用触发一次，不用于 worker 参数序列化。 |
 
 ### 管线顺序
 
 ```
-1. cropToSubject（可选）
-2. chooseGrid → toGrid（BOX 面积平均）
-3. floodRemoveBg（可选）
-4. matchDirectData / matchDitherData（CIEDE2000 最近色）
-5. despeckle（可选）
-6. limitColorsIdx（若 maxColors>0）
-7. mergeRareIdx（若 minBeads>1）
+1. colorQuantize（可选）
+2. buildForegroundMask（source flood；低置信度退化 alpha-only）
+3. mask-aware subject/aspect crop
+4. 基于 ForegroundMask 做 mask-aware crop/extension/smooth：coverage=0 不参与；gauss/guided 的 partial coverage 为权重，L0 使用 bbox + 最近前景常量延拓隔离（非数学加权 L0）
+5. area/DPID 一次直接输出目标 GridSamples，coverage 与最终 mask 不变
+6. matchDirectData / matchDitherData（CIEDE2000 最近色）
+7. despeckle / limitColorsIdx / mergeRareIdx（可选）
 8. 输出 Grid
 ```
 
@@ -126,6 +128,7 @@ function countGridMaterials(grid: Grid): MaterialRow[] // { code, hex, count }[]
 
 - `src/core/pipeline.ts`: `generatePattern` / `generatePatternMapFirst` / `generatePatternAdvanced` / `generatePatternSoft`（历史多管线，仅 `generatePatternBead` 为当前主线）。
 - `src/core/preprocess.ts`: `boxBlur`, `gaussianBlur`。
+- `src/core/l0.ts`: `l0Smooth` 使用非周期 Neumann 梯度/伴随负散度和确定性 Jacobi-PCG；导出 `neumannGradient`、`neumannNegativeDivergence`、`applyNeumannSystem`、`solveNeumannSystem` 供边界/残差测试和高级集成使用。PCG 默认最多 200 次、相对残差容差 `1e-8`，未收敛会明确报错；不做 periodic padding，1×N/N×1/非 2 次幂尺寸可直接处理。工作区复用并受 64 MiB 估算预算门禁（`l0MemoryBudget`）。这是与 mask 外常量延拓匹配的工程离散边界条件，不保证与论文 MATLAB 逐像素相同。
 - `src/core/subject.ts`: `estimateBackground`, `computeBBox`, `cropSquare`。
 - `src/beadpattern/ciede2000.ts`: `srgbToLab`, `ciede2000`, `Lab`。
 - `src/core/color.ts`: `srgbToOklab`, `oklabDistance`, `hexToRgb`, `rgbToHex`（Oklab 体系，bead 管线用 Lab/CIEDE2000）。

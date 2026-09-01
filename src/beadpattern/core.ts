@@ -1,14 +1,30 @@
-// 转像素核心：以 TS 忠实重写 bead-pattern(scripts/generate.py) 的整套思路。
+// 转像素核心：source ForegroundMask → mask-aware crop/extension/smooth →
+// 一次 area/DPID resample → match/postprocess。默认分层：库 none+box，
+// board guided+dpid，CLI l0+dpid；smooth 只影响 RGB，alpha/final mask 不变。
 // 组件与生成器一一对应：crop_to_subject / crop_to_aspect / to_grid(Image.BOX)
 //   / flood_remove_bg / match_direct / match_dither / despeckle / limit_colors。
 
-import type { RgbaImage, Grid, Swatch } from '../core/types';
+import type { ColorQuantizeOptions, RgbaImage, Grid, Swatch } from '../core/types';
 import { ciede2000, srgbToLab, type Lab } from './ciede2000';
 import { MARD291 } from '../palettes/mard291';
 import { l0Smooth } from '../core/l0';
 import { guidedSmooth } from '../core/guided';
 import { gaussianBlur } from '../core/preprocess';
-import { dpidDownscale } from '../core/dpid';
+import { applyMaskForSmoothing } from '../core/smoothing';
+import { extendMaskedRgb } from '../core/background';
+import {
+  buildForegroundMask,
+  cropImageAndMaskToAspect,
+  cropImageAndMaskToSubject,
+  type ForegroundMask,
+} from '../core/background';
+import {
+  areaResampleToGrid,
+  dpidResampleToGrid,
+  fitResampleToGrid,
+  gridSamplesToRgba,
+} from '../core/resample';
+import { quantizeImage } from '../core/color-quantize';
 
 /** 保边平滑算法（转像素前应用） */
 export type SmoothKind = 'none' | 'gauss' | 'guided' | 'l0';
@@ -53,7 +69,7 @@ export function cropToSubject(img: RgbaImage, pad = 0): RgbaImage {
   const { width, height, data } = img;
   let x0 = width, y0 = height, x1 = -1, y1 = -1;
   for (let i = 0; i < width * height; i++) {
-    if ((data[i * 4 + 3] as number) <= 128) continue;
+    if ((data[i * 4 + 3] as number) < 128) continue;
     const x = i % width;
     const y = (i - x) / width;
     if (x < x0) x0 = x;
@@ -77,7 +93,7 @@ export function cropToAspectAligned(img: RgbaImage, gw: number, gh: number): Rgb
   if (Math.abs(target - cur) < 1e-6) return img;
   let minX = width, minY = height, maxX = -1, maxY = -1;
   for (let i = 0; i < width * height; i++) {
-    if ((data[i * 4 + 3] as number) <= 128) continue;
+    if ((data[i * 4 + 3] as number) < 128) continue;
     const x = i % width;
     const y = (i - x) / width;
     if (x < minX) minX = x;
@@ -133,70 +149,17 @@ export interface GridRgba {
   data: Uint8ClampedArray; // gw*gh*4，RGBA 每格
 }
 
-/** fit=true 保持比例居中补透明；false 直接缩到 gw×gh */
+/** fit=true 保持比例居中补透明；false 直接按精确 footprint 缩到 gw×gh。 */
 export function toGrid(img: RgbaImage, gw: number, gh: number, fit: boolean): GridRgba {
-  if (!fit) {
-    return { gw, gh, data: boxDownsample(img.data, img.width, img.height, gw, gh) };
-  }
-  // fit：等比缩放后居中贴到 gw×gh 透明画布
-  const ratio = Math.min(gw / img.width, gh / img.height);
-  const nw = Math.max(1, Math.round(img.width * ratio));
-  const nh = Math.max(1, Math.round(img.height * ratio));
-  const small = boxDownsample(img.data, img.width, img.height, nw, nh);
-  const canvas = new Uint8ClampedArray(gw * gh * 4);
-  const ox = Math.floor((gw - nw) / 2);
-  const oy = Math.floor((gh - nh) / 2);
-  for (let y = 0; y < nh; y++) {
-    for (let x = 0; x < nw; x++) {
-      const si = (y * nw + x) * 4;
-      const di = ((oy + y) * gw + (ox + x)) * 4;
-      canvas[di] = small[si]!;
-      canvas[di + 1] = small[si + 1]!;
-      canvas[di + 2] = small[si + 2]!;
-      canvas[di + 3] = small[si + 3]!;
-    }
-  }
-  return { gw, gh, data: canvas };
-}
-
-/** Image.BOX：目标格 = 源区域平均（RGBA 全部计入） */
-function boxDownsample(
-  src: Uint8ClampedArray,
-  sw: number,
-  sh: number,
-  gw: number,
-  gh: number,
-): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(gw * gh * 4);
-  for (let gy = 0; gy < gh; gy++) {
-    const y0 = Math.floor((gy * sh) / gh);
-    const y1 = Math.max(y0 + 1, Math.floor(((gy + 1) * sh) / gh));
-    for (let gx = 0; gx < gw; gx++) {
-      const x0 = Math.floor((gx * sw) / gw);
-      const x1 = Math.max(x0 + 1, Math.floor(((gx + 1) * sw) / gw));
-      let r = 0, g = 0, b = 0, a = 0, n = 0;
-      for (let y = y0; y < y1; y++) {
-        for (let x = x0; x < x1; x++) {
-          const i = (y * sw + x) * 4;
-          r += src[i]!;
-          g += src[i + 1]!;
-          b += src[i + 2]!;
-          a += src[i + 3]!;
-          n++;
-        }
-      }
-      const o = (gy * gw + gx) * 4;
-      out[o] = Math.round(r / n);
-      out[o + 1] = Math.round(g / n);
-      out[o + 2] = Math.round(b / n);
-      out[o + 3] = Math.round(a / n);
-    }
-  }
-  return out;
+  const mask = buildForegroundMask(img, { mode: 'none' });
+  const samples = fit
+    ? fitResampleToGrid(img, gw, gh, 'area', { mask })
+    : areaResampleToGrid(img, gw, gh, { mask });
+  return { gw, gh, data: gridSamplesToRgba(samples).data };
 }
 
 // ---------------------------------------------------------------------------
-// 网格级 CIEDE2000 去背景（flood_remove_bg）
+// 历史兼容：网格级 CIEDE2000 去背景（主管线已改为源图 ForegroundMask，不再调用）
 // ---------------------------------------------------------------------------
 
 /** 返回更新后的 alpha：与边界连通且 CIEDE2000 <= tol 的格子置 0 */
@@ -285,7 +248,7 @@ export function matchDirectData(grid: GridRgba, alpha: Uint8ClampedArray, palett
   const { gw, gh, data } = grid;
   const idx = new Int32Array(gw * gh).fill(-1);
   for (let i = 0; i < gw * gh; i++) {
-    if ((alpha[i * 4 + 3] as number) <= 128) continue;
+    if ((alpha[i * 4 + 3] as number) < 128) continue;
     idx[i] = nearestIndex({ r: data[i * 4]!, g: data[i * 4 + 1]!, b: data[i * 4 + 2]! }, palette);
   }
   return idx;
@@ -299,7 +262,7 @@ export function matchDitherData(grid: GridRgba, alpha: Uint8ClampedArray, palett
   for (let y = 0; y < gh; y++) {
     for (let x = 0; x < gw; x++) {
       const i = (y * gw + x) * 4;
-      if ((alpha[i + 3] as number) <= 128) continue;
+      if ((alpha[i + 3] as number) < 128) continue;
       const old = { r: work[i]!, g: work[i + 1]!, b: work[i + 2]! };
       const k = nearestIndex(old, palette);
       idx[y * gw + x] = k;
@@ -313,7 +276,7 @@ export function matchDitherData(grid: GridRgba, alpha: Uint8ClampedArray, palett
       for (const [nx, ny, w] of spreads) {
         if (nx < 0 || nx >= gw || ny < 0 || ny >= gh) continue;
         const ni = (ny * gw + nx) * 4;
-        if ((alpha[ni + 3] as number) <= 128) continue;
+        if ((alpha[ni + 3] as number) < 128) continue;
         work[ni] = Math.min(255, Math.max(0, work[ni]! + err[0]! * w));
         work[ni + 1] = Math.min(255, Math.max(0, work[ni + 1]! + err[1]! * w));
         work[ni + 2] = Math.min(255, Math.max(0, work[ni + 2]! + err[2]! * w));
@@ -487,6 +450,19 @@ export function mergeRareIdx(idx: Int32Array, palette: BeadPalette, minBeads: nu
 // 编排：generatePatternBead
 // ---------------------------------------------------------------------------
 
+export interface BeadDiagnostics {
+  resamplePasses: number;
+  resampleMethod?: 'area' | 'dpid';
+  sourceFloodApplied?: boolean;
+}
+
+export interface ResampleEvent {
+  phase: 'fit' | 'direct';
+  method: 'area' | 'dpid';
+}
+
+export type ResampleHook = (event: ResampleEvent) => void;
+
 export interface BeadOptions {
   palette?: readonly Swatch[];
   /** 网格最大边长（auto 模式，按原图比例取另一边） @default 50（库默认；CLI 默认 64） */
@@ -504,7 +480,7 @@ export interface BeadOptions {
   minBeads?: number;
   /** flood 去背景 CIEDE2000 阈值 */
   backgroundTolerance?: number;
-  /** 转像素前的保边平滑（默认 none）。l0 参数见 smoothLambda，guided 见 smoothEps */
+  /** 转像素前的 mask-aware 保边平滑（库默认 none；board guided；CLI l0）。l0 使用 bbox 隔离延拓。 */
   smooth?: SmoothKind;
   /** gauss 平滑 σ（smooth='gauss' 时生效），默认 1 */
   smoothSigma?: number;
@@ -514,10 +490,16 @@ export interface BeadOptions {
   smoothRadius?: number;
   /** 引导滤波正则（smooth='guided' 时生效，0..255 尺度），默认 100 */
   smoothEps?: number;
-  /** 降采样算法（默认 box）。dpid 仅 auto 网格模式生效；fixed/fill 仍用 box */
+  /** 降采样算法（默认 box）；auto/fixed/fill 均由统一重采样器直接输出目标网格 */
   scale?: ScaleKind;
-  /** DPID 细节权重指数（scale='dpid' 时生效），默认 1.0；0 退化为 box */
+  /** DPID 细节权重指数（scale='dpid' 时生效），默认 1.0；0 精确退化为 area */
   dpidLambda?: number;
+  /** 主管线统一颜色量化，默认关闭；数字兼容应由 quantizeImage 单独调用。 */
+  colorQuantize?: ColorQuantizeOptions;
+  /** @internal 测试/诊断输出，不参与图像行为。 */
+  diagnostics?: BeadDiagnostics;
+  /** @internal library-only hook; functions are not intended for worker serialization. */
+  onResample?: ResampleHook;
 }
 
 const DEFAULTS_BEAD = {
@@ -531,9 +513,13 @@ const DEFAULTS_BEAD = {
 
 function chooseGrid(img: RgbaImage, opts: BeadOptions): { gw: number; gh: number; fit: boolean } {
   if (opts.fixed) {
+    if (!Number.isInteger(opts.fixed.w) || opts.fixed.w < 1 || !Number.isInteger(opts.fixed.h) || opts.fixed.h < 1) {
+      throw new Error('fixed.w/fixed.h 必须为正整数');
+    }
     return { gw: opts.fixed.w, gh: opts.fixed.h, fit: true };
   }
   const maxSide = opts.maxSide ?? DEFAULTS_BEAD.maxSide;
+  if (!Number.isInteger(maxSide) || maxSide < 1) throw new Error('maxSide 必须为正整数');
   if (img.width >= img.height) {
     const gw = maxSide;
     const gh = Math.max(1, Math.round((maxSide * img.height) / img.width));
@@ -546,54 +532,79 @@ function chooseGrid(img: RgbaImage, opts: BeadOptions): { gw: number; gh: number
 
 /**
  * 转像素管线（bead 思路，TS 版）：
- * (可选透明通道裁剪) → BOX 面积平均缩到网格 → (可选 flood 按颜色清纯背景)
- * → CIEDE2000 最近色匹配 → (despeckle / limit_colors / 可选抖动)。
- * 默认不做颜色抠背景：只按透明通道裁主体，有色背景原样带上。
+ * 源图 foreground mask/flood → mask-aware crop/fill → mask RGB 延拓隔离 → smooth
+ * → area/DPID 一次输出目标网格 → CIEDE2000 匹配 → 后处理。
+ * flood 置信度不足时安全退化为 alpha-only，宁可保留背景也不猜测删除主体。
  */
 export function generatePatternBead(img: RgbaImage, options: BeadOptions): Grid {
   const palette = buildBeadPalette(options.palette ?? MARD291);
+  if (palette.codes.length === 0) throw new Error('palette 不能为空');
   const removeBg = options.removeBg ?? DEFAULTS_BEAD.removeBg;
   const tol = options.backgroundTolerance ?? DEFAULTS_BEAD.backgroundTolerance;
+  if (!Number.isFinite(tol) || tol < 0) throw new Error('backgroundTolerance 必须为有限非负数');
 
-  // 1. 仅按透明通道裁主体（无 alpha 的图不裁，背景一并保留）
-  let work = img;
+  // 1. 源图阶段统一构建连续 coverage mask；flood 不再在缩格后猜背景。
+  let work = options.colorQuantize ? quantizeImage(img, options.colorQuantize) : img;
+  let mask: ForegroundMask = buildForegroundMask(work, {
+    mode: removeBg,
+    tolerance: tol,
+    alpha: { threshold: 128 },
+  });
   if (options.cropToSubject) {
-    work = cropToSubject(work);
+    ({ image: work, mask } = cropImageAndMaskToSubject(work, mask));
   }
 
-  // 1.5 可选保边平滑（L0 / 引导 / 高斯），在降采样前应用
+  // 2. fixed fill 在源图与 mask 上同步按目标比例裁剪；auto 直接按主体比例选网格。
+  const chosen = chooseGrid(work, options);
+  if (options.fill && chosen.fit) {
+    ({ image: work, mask } = cropImageAndMaskToAspect(work, mask, chosen.gw, chosen.gh));
+  }
+
+  // 3. mask-aware smoothing。none 完全不改写源 RGB；gauss/guided 使用
+  // coverage 加权的 straight-RGB 邻域，L0 仅在隔离 bbox 中做最近前景延拓。
   const smooth = options.smooth ?? 'none';
   if (smooth === 'gauss') {
-    work = gaussianBlur(work, options.smoothSigma ?? 1);
+    const sigma = options.smoothSigma ?? 1;
+    if (!Number.isFinite(sigma) || sigma <= 0 || sigma > 64) throw new Error('smoothSigma 必须为 finite、正数且不超过 64');
+    work = applyMaskForSmoothing(work, mask, (tile, coverage) => gaussianBlur(tile, sigma, coverage));
   } else if (smooth === 'guided') {
-    work = guidedSmooth(work, { r: options.smoothRadius ?? 8, eps: options.smoothEps ?? 100 });
+    work = applyMaskForSmoothing(work, mask, (tile, coverage) => guidedSmooth(tile, {
+      r: options.smoothRadius ?? 8,
+      eps: options.smoothEps ?? 100,
+      coverage,
+    }));
   } else if (smooth === 'l0') {
-    work = l0Smooth(work, { lam: options.smoothLambda ?? 0.02 });
+    work = applyMaskForSmoothing(extendMaskedRgb(work, mask), mask, (tile) => l0Smooth(tile, { lam: options.smoothLambda ?? 0.02 }));
+  } else if (smooth !== 'none') {
+    throw new Error(`smooth 非法: ${String(smooth)}`);
   }
 
-  // 2. 决定网格 + 可选按比例裁铺满
-  const { gw, gh, fit } = chooseGrid(work, options);
-  if (options.fill && fit) {
-    work = cropToAspectAligned(work, gw, gh);
-  }
-
-  // 3. 降采样到网格：BOX 面积平均（默认）或 DPID 保细节（仅 auto 模式；1:1 时两者皆恒等）
-  let source = work;
-  if (options.scale === 'dpid' && !fit) {
-    source = dpidDownscale(work, gw, gh, { lambda: options.dpidLambda ?? 1.0 });
-  }
-  const grid = toGrid(source, gw, gh, fit);
-
-  // 4. 网格级去背景
-  let alpha: Uint8ClampedArray;
-  if (removeBg === 'flood') {
-    alpha = floodRemoveBg(grid, tol);
+  // 4. area/DPID 一次性输出目标网格；fixed 不再跳过 DPID，也不二次 BOX。
+  const { gw, gh, fit } = chosen;
+  const scale = options.scale ?? 'box';
+  if (scale !== 'box' && scale !== 'dpid') throw new Error(`scale 非法: ${String(scale)}`);
+  const sampleOptions = { mask, lambda: options.dpidLambda ?? 1 };
+  const method = scale === 'dpid' ? 'dpid' as const : 'area' as const;
+  let samples;
+  if (fit && !options.fill) {
+    options.onResample?.({ phase: 'fit', method });
+    samples = fitResampleToGrid(work, gw, gh, method, sampleOptions);
   } else {
-    alpha = new Uint8ClampedArray(grid.data);
+    options.onResample?.({ phase: 'direct', method });
+    samples = method === 'dpid'
+      ? dpidResampleToGrid(work, gw, gh, sampleOptions)
+      : areaResampleToGrid(work, gw, gh, sampleOptions);
   }
-  const maskAlpha = alpha;
+  const sampled = gridSamplesToRgba(samples);
+  const grid: GridRgba = { gw, gh, data: sampled.data };
+  const maskAlpha = new Uint8ClampedArray(sampled.data);
+  if (options.diagnostics) {
+    options.diagnostics.resamplePasses = (options.diagnostics.resamplePasses ?? 0) + 1;
+    options.diagnostics.resampleMethod = method;
+    options.diagnostics.sourceFloodApplied = removeBg === 'flood';
+  }
 
-  // 5. 匹配
+  // 5. 匹配（alpha >= 128 统一纳入）
   let idx: Int32Array;
   if (options.dither ?? DEFAULTS_BEAD.dither) {
     idx = matchDitherData(grid, maskAlpha, palette);

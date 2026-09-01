@@ -6,8 +6,8 @@
 
 ## 特性
 
-- **预处理**：内置 L0 梯度最小化 / 高斯 / 引导滤波（默认 L0 λ=0.02，保边压平，平坦区自动归零、强边保留锐化），后续可扩展。
-- **转像素**：以 TS 忠实重写 [bead-pattern](https://github.com/wuZHeBoy/bead-pattern) 的整套思路——主体裁剪、保细节降采样（DPID，细节权重偏离均值越大越高）、完整 **CIEDE2000** 感知配色、网格级去背景、despeckle 除杂、limit_colors 限色、稀有色合并。
+- **预处理**：内置 L0 梯度最小化 / 高斯 / 引导滤波；默认分层明确为：库 `none+box`、board `guided+dpid`、CLI `l0+dpid`。L0 使用非周期 Neumann + PCG，并设置可诊断的 64 MiB 工作区预算。
+- **转像素**：以 TS 忠实重写 [bead-pattern](https://github.com/wuZHeBoy/bead-pattern) 的整套思路——主体裁剪、保细节降采样（DPID，细节权重偏离均值越大越高）、完整 **CIEDE2000** 感知配色、源图阶段安全置信度 flood 前景 mask、despeckle 除杂、limit_colors 限色、稀有色合并。
 - **固定色卡**：内置 **MARD 291** 官方瓶身色号（如 `A1`/`B5`），另可切换 **MARD 221** 标准色卡（A–H/M 系列 221 色）；输出可直接按色号采购。
 - **输出**：正式图纸 PNG（标题栏 + 每格色号 + 坐标 + 网格线 + 板界 + **内嵌材料清单**）+ 材料清单 CSV。
 - **稀有色合并**：`--min-beads` 把用量过少的色号就近并入 CIEDE2000 最近的在用色，避免“买一包只用一两颗”。
@@ -45,14 +45,14 @@ node E:\M_Workbench\MirrorPin\dist\cli.js --version    # 查看版本
 | `-o, --output <path>` | 输出图纸 PNG | 必填（与 --materials 二选一） |
 | `--materials <path>` | 输出材料清单 CSV（表头 `code,hex,count`） | 不输出 |
 | `--max-side <n>` | 网格最大边长（另一边按比例），需为正整数 | 64 |
-| `--blur <sigma>` | 高斯模糊强度（正数；`0` 表示关闭） | 1 |
-| `--no-blur` | 关闭模糊 | — |
-| `--smooth <kind>` | 保边平滑（默认 `l0`）：`none/gauss/guided/l0/l0soft`；`--smooth-sigma` 调参（gauss=σ，l0/l0soft=λ，guided=eps） | l0 |
+| `--blur <sigma>` | 兼容旧别名；显式时启用高斯平滑并覆盖 `--smooth`（正数；`0` 表示关闭） | 无默认值；未指定时别名不启用，实际 `smooth=l0` |
+| `--no-blur` | 兼容旧别名；显式时关闭平滑 | 未指定时实际 `smooth=l0` |
+| `--smooth <kind>` | 保边平滑：`none/gauss/guided/l0`；`--smooth-sigma` 调参（gauss=σ，l0=λ） | l0 |
 | `--scale <kind>` | 降采样：`box`（面积平均）/ `dpid`（保细节，默认） | dpid |
 | `--colors <n>` | 预处理降色数（0=不降色） | 64 |
 | `--max-colors <n>` | 最终色号上限 | 不限制 |
 | `--min-beads <n>` | 稀有色合并：用量 < n 的色号并入 CIEDE2000 最近在用色 | 不合并 |
-| `--remove-bg <none\|flood>` | 网格级按颜色清纯背景（flood 用 CIEDE2000 阈值 12） | none |
+| `--remove-bg <none\|flood>` | 源图阶段安全置信度背景 flood（CIEDE2000 阈值 12；不确定时保守不删） | none |
 | `--no-crop` | 关闭透明通道裁剪 | 默认裁剪 |
 | `--despeckle` | 清理 <2 格的杂点 | 关 |
 | `--dither` | 抖动（照片渐变用，会导致色号增多） | 关 |
@@ -78,13 +78,18 @@ node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" -o 
 ### 图纸说明
 
 - 每格居中色号（亮底黑字/暗底白字），四周行列坐标（每 5 格标注），网格线每格细线/每 10 格粗线/板界红线，背景透明区为浅棋盘。
+
 - 顶部标题栏：`MirrorPin 拼豆图纸 · W×H 格 · N 色 · 合计 M 豆 · 色卡 MARD 291/221`。
 - 右侧材料清单面板：色块 + 色号 + 色值 + 用量（×n），按用量降序，单列放不下自动分列；副标题 `MARD 291/221 · N 色 · 合计 M 颗`。
 - CSV 表头 `code,hex,count`，如 `C29,#4B5BA3,619`。
 
 ## 算法库
 
-入口 `src/index.ts`。核心导出：`generatePatternBead`（转像素主管线；`smooth: l0|guided|gauss|none` + `scale: dpid|box`，M1 起默认 `l0+dpid`）、`l0Smooth`/`guidedSmooth`/`dpidDownscale`/`gaussianBlur`（预处理/降采样）、`renderPatternPng`/`renderPatternSvg`/`countGridMaterials`（渲染与统计）、`MARD291`/`MARD221`（色卡）。
+入口 `src/index.ts`。核心导出：`generatePatternBead`（转像素主管线；`smooth: l0|guided|gauss|none` + `scale: dpid|box`，库默认 `none+box`；board/CLI 默认见下）、`l0Smooth`/`guidedSmooth`/`dpidDownscale`/`gaussianBlur`（预处理/降采样）、`renderPatternPng`/`renderPatternSvg`/`countGridMaterials`（渲染与统计）、`MARD291`/`MARD221`（色卡）。
+
+### L0 边界与资源语义
+
+`l0Smooth` 使用非周期 Neumann 离散梯度：最右/最下 forward gradient 为 0，负散度是其严格伴随；每个半二次外循环的 `(I + beta DᵀD)S = I + beta DᵀV` 子问题由确定性的 Jacobi-PCG 求解（默认最多 200 次、相对容差 `1e-8`，未收敛会报错）。因此不再做 2 次幂 periodic FFT padding，`1×N`、`N×1` 和任意尺寸均直接工作。为避免大图分配失控，核心复用工作数组并在分配前按 64 MiB 上限估算；预算信息通过 `l0MemoryBudget` 导出。该边界条件是工程上与 mask 外常量延拓一致的离散语义，不宣称与论文 MATLAB 逐像素完全一致。
 
 ```ts
 import {
@@ -111,8 +116,8 @@ const rows = countGridMaterials(grid); // { code, hex, count }[]
 ### 管线
 
 ```
-预处理(保边平滑 L0/引导/高斯，可关) → 只按透明通道裁主体(有背景则带上)
-→ 降采样到网格（DPID 保细节，BOX 等价口径可回退）→ CIEDE2000 最近色号
+source ForegroundMask → mask-aware crop/extension/smooth（mask=0 不参与；gauss/guided 对 partial coverage 作权重，L0 采用 bbox + 最近前景常量延拓的工程隔离语义）
+→ 一次 area/DPID 重采样到网格（coverage/最终 alpha 不变）→ CIEDE2000 最近色号
 → (可选) despeckle 去杂 / limit_colors 限色 / 稀有色合并(mergeRareIdx) / dither
 → 正式图纸渲染(色号+坐标+网格+板界+图例) + 材料清单
 ```
@@ -166,11 +171,12 @@ npm run build    # 生产构建
 - **[bead-pattern](https://github.com/wuZHeBoy/bead-pattern)（MIT）** —— 转像素算法的整体思路与实现被本项目**以 TypeScript 重写**：主体裁剪 `crop_to_subject`、`Image.BOX` 面积平均降采样、完整 `CIEDE2000` 配色、`flood_remove_bg` 去背景、`despeckle`/`limit_colors` 后处理。重写保留其原始 MIT 版权声明。
 - **[pyxelate](https://github.com/sedthh/pyxelate)（MIT）** —— 调研阶段仅作试跑参考，未进入正式管线。
 
-### 运行时依赖（新增 fft.js 用于 L0 的频域求解，MIT）及其许可
+### 运行时依赖（MIT）及其许可
 
 | 依赖 | 许可 | 用途 |
 |---|---|---|
 | sharp | Apache-2.0 | CLI/Node 端图片编解码与 PNG 渲染 |
+| fft.js | MIT | 现有其它频域实验/兼容路径；L0 主求解器使用纯 TypeScript Neumann-PCG |
 | esbuild | MIT | CLI 打包 |
 | tsup | MIT | 库打包 |
 | vitest | MIT | 测试 |
