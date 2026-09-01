@@ -101,33 +101,7 @@ html {
 }
 
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
-    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <style type="text/tailwindcss">
-  @theme inline {
-    --color-background: var(--mirrorpin-background);
-    --color-foreground: var(--mirrorpin-foreground);
-    --color-card: var(--mirrorpin-card);
-    --color-card-foreground: var(--mirrorpin-card-foreground);
-    --color-popover: var(--mirrorpin-popover);
-    --color-popover-foreground: var(--mirrorpin-popover-foreground);
-    --color-primary: var(--mirrorpin-primary);
-    --color-primary-foreground: var(--mirrorpin-primary-foreground);
-    --color-muted: var(--mirrorpin-muted);
-    --color-muted-foreground: var(--mirrorpin-muted-foreground);
-    --color-border: var(--mirrorpin-border);
-    --color-input: var(--mirrorpin-input);
-    --color-ring: var(--mirrorpin-ring);
-    --radius-sm: var(--mirrorpin-radius-sm);
-    --radius-md: var(--mirrorpin-radius-md);
-    --radius-lg: var(--mirrorpin-radius-lg);
-  }
-  @layer base {
-    body { background: var(--mirrorpin-background); color: var(--mirrorpin-foreground); }
-    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
-    th { @apply whitespace-nowrap; }
-  }
-    </style>
+    <link rel="stylesheet" href="../app/styles.css">
     <style id="semantic-token-fallback">
       .bg-background { background-color: var(--mirrorpin-background); }
       .text-background { color: var(--mirrorpin-background); }
@@ -208,22 +182,20 @@ html {
         <i data-lucide="grid-3x3" class="h-5 w-5 text-primary"></i>
         MirrorPin
       </a>
-      <a href="https://github.com/MirrorPin" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors">
-        <i data-lucide="github" class="h-5 w-5"></i>
-      </a>
+      <span class="text-xs font-medium text-muted-foreground">浏览器本地版</span>
     </div>
   </header>
 
   <main class="flex-1 w-full">
     <div class="mx-auto max-w-3xl px-6 py-16">
-      <section data-region="error state" class="rounded-2xl border border-border bg-card p-10 text-center shadow-sm">
+      <section data-region="error state" class="mirrorpin-surface mirrorpin-section text-center">
         <div class="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full" style="background-color: color-mix(in srgb, var(--mirrorpin-state-error) 12%, transparent);">
           <i data-lucide="circle-alert" class="h-12 w-12" style="color: var(--mirrorpin-state-error);"></i>
         </div>
         <h1 class="mirrorpin-heading text-2xl text-foreground mb-3">生成失败</h1>
         <p class="mirrorpin-body mb-6">图片尺寸过大或浏览器内存不足，无法完成计算。你可以尝试选择更小的板规、关闭抠白底，或换一张更小的图片。</p>
         <p class="text-sm text-muted-foreground mb-8">图片始终不会上传到服务器，所有问题只与本地设备有关。</p>
-        <a href="./index.html" id="retry-generate" data-dom-id="retry-generate" class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <a href="./index.html" id="retry-generate" data-dom-id="retry-generate" class="mirrorpin-primary-button inline-flex items-center justify-center rounded-xl px-6 py-3 text-base font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           返回重试
         </a>
       </section>
@@ -240,26 +212,7 @@ html {
     <i data-lucide="arrow-up" class="h-5 w-5"></i>
   </a>
 
-  <style>
-    .preset-card:has(input:checked),
-    .complexity-card:has(input:checked),
-    .smooth-card:has(input:checked),
-    .scale-card:has(input:checked) {
-      background-color: var(--mirrorpin-primary-50);
-      border-color: var(--mirrorpin-primary);
-      border-width: 2px;
-    }
-    .preset-card:has(input:checked) svg {
-      color: var(--mirrorpin-primary);
-    }
-    .toggle-switch span {
-      pointer-events: none;
-    }
-  </style>
-
-  <script>
-    lucide.createIcons();
-  </script>
+  <script type="module" src="../app/icons.mjs"></script>
   <script type="module" src="../app/main.mjs"></script>
 </body>
 </html>

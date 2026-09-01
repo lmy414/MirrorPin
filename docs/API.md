@@ -1,134 +1,176 @@
-# MirrorPin API
+# MirrorPin API 0.3.0
 
-本文档面向算法库使用者（`import from 'mirrorpin-core'`）。
+本文档面向 `mirrorpin-core` 使用者。产品入口统一为 `generatePatternBead()` 或板规封装 `generateForBoard()`。
 
-## 核心类型
+## 数据类型
 
 ```ts
-// src/core/types.ts
 interface RgbaImage { width: number; height: number; data: Uint8ClampedArray }
-interface Swatch { code: string; hex: string }          // hex 不含 #，如 "4B5BA3"
+interface Swatch { code: string; hex: string }
 interface Cell { code: string; hex: string; external: boolean }
 interface Grid { rows: number; cols: number; cells: Cell[][]; colorCount: number }
-interface RGB { r: number; g: number; b: number }
 ```
 
-`MardSwatch` 与 `Swatch` 同构，保留别名以兼容历史导入。
+Alpha 契约：连续 coverage 用于采样；`coverage >= 0.5`（源 Alpha 128）才是有效拼豆格。透明隐藏 RGB 不参与平滑、面积积分或 DPID。
 
 ## 色卡
 
 ```ts
 import { MARD291, MARD221 } from 'mirrorpin-core';
-MARD291.length // 291 = 标准 221（A–H/M）+ 扩展 70（P/Q/R/T/Y/ZG）
-MARD221.length // 221
-MARD221.every(s => /^[A-HM]\d+$/.test(s.code)) // true，无扩展系列
+MARD291.length; // 291
+MARD221.length; // 221，A-H/M 标准子集
 ```
-
-`MARD221` 实现为 `MARD291.filter(s => MARD221_PREFIXES.has(s.code.replace(/\d+$/, '')))`，其中 `MARD221_PREFIXES = Set(['A','B','C','D','E','F','G','H','M'])`。
 
 ## generatePatternBead
 
 ```ts
-import { generatePatternBead } from 'mirrorpin-core';
-const grid: Grid = generatePatternBead(image: RgbaImage, options: BeadOptions);
+const grid = generatePatternBead(image, {
+  palette: MARD221,
+  fixed: { w: 78, h: 78 },
+  fill: true,
+  cropToSubject: true,
+  smooth: 'guided',
+  scale: 'area',
+  spatial: { enabled: true, topK: 8, smoothness: 0.35 },
+});
 ```
 
-### BeadOptions
+### 主要 BeadOptions
 
-| 字段 | 类型 | 默认（库） | 说明 |
+| 字段 | 类型 | clean 默认 | 说明 |
 |---|---|---|---|
-| `palette` | `readonly Swatch[]` | `MARD291` | 色卡 |
-| `maxSide` | `number` | `50`（CLI 默认 64） | 网格最大边长，另一边按比例 |
-| `fixed` | `{ w:number; h:number }` | — | 固定尺寸（此时按比例居中补透明） |
-| `fill` | `boolean` | — | 配合 `fixed` 按比例裁铺满整板 |
-| `cropToSubject` | `boolean` | `false` | 按透明通道裁主体 |
-| `removeBg` | `'none' \| 'flood'` | `'none'` | 源图阶段构建安全置信度前景 mask；不确定时退化为 alpha-only |
-| `backgroundTolerance` | `number` | `12` | flood 的 CIEDE2000 阈值 |
-| `smooth` | `'none' \| 'gauss' \| 'guided' \| 'l0'` | 库 `none`；board `guided`；CLI `l0` | 转像素前的保边平滑（`gauss` 用 `smoothSigma`，`guided` 用 `smoothRadius/smoothEps`，`l0` 用 `smoothLambda`） |
-| `smoothSigma` | `number` | `1` | gauss 的 σ |
-| `smoothLambda` | `number` | `0.02` | L0 的 λ；CLI 可用兼容别名 `l0soft` 采用 0.005 |
-| `smoothRadius` | `number` | `8` | 引导滤波窗口半径 |
-| `smoothEps` | `number` | `100`（0..255 尺度） | 引导滤波正则 |
-| `scale` | `'box' \| 'dpid'` | 库 `box`；board/CLI `dpid` | auto/fixed/fill 均一次直接重采样到目标网格 |
-| `dpidLambda` | `number` | `1.0`（0 退化为 box） | DPID 细节权重指数 |
-| `despeckle` | `boolean` | `false` | 清理 <2 格的杂点 |
-| `dither` | `boolean` | `false` | Floyd–Steinberg 抖动 |
-| `maxColors` | `number` | — | 最终色号上限（限色） |
-| `minBeads` | `number` | `0` | 稀有色合并阈值（0/1=关） |
-| `diagnostics` | `BeadDiagnostics` | — | 测试/诊断输出；`resamplePasses` 来自实际重采样调用次数。 |
-| `onResample` | `(event) => void` | — | library-only 测试/诊断 hook；每次实际 fit/direct area/DPID 调用触发一次，不用于 worker 参数序列化。 |
+| `palette` | `readonly Swatch[]` | MARD291 | 色卡 |
+| `maxSide` | number | 50 | auto 网格最大边长 |
+| `fixed` | `{w,h}` | — | 固定板规 |
+| `fill` | boolean | false | fixed 时按比例裁铺满 |
+| `cropToSubject` | boolean | false | 按 source foreground mask 裁主体 |
+| `removeBg` | `none\|flood` | none | 源图安全置信度背景 flood |
+| `backgroundTolerance` | number | 12 | flood 的 CIEDE2000 阈值 |
+| `smooth` | `none\|gauss\|guided\|l0` | guided | mask-aware 平滑 |
+| `scale` | `area\|box\|dpid` | area | 目标网格采样；box 为 area 兼容名 |
+| `colorQuantize` | `{colors,...}` | — | 可选确定性预降色，默认关闭 |
+| `spatial` | `Partial<SpatialQuantizeOptions>` | 开启 | top-K + Potts/ICM + cleanup |
+| `maxColors` | number | — | 能量感知最终色号预算 |
+| `minBeads` | number | 0 | 空间分量级稀有色合并 |
+| `dither` | boolean | false | legacy 风格分支；不能与 spatial 同开 |
+| `maxOperations` | number | 自动 | cleanup/color-budget 共享实时预算 |
+| `diagnostics` | `BeadDiagnostics` | — | 写入 timing、energy、fragmentation 等 |
+| `onProgress` | `(event)=>void` | — | `prepare/resample/candidates/optimize/cleanup/done` |
+| `shouldCancel` | `()=>boolean` | — | 阶段边界取消检查 |
+| `onDetailedResult` | `(details)=>void` | — | library-only 验收 hook，不序列化到 Worker |
+
+### SpatialQuantizeOptions
+
+```ts
+interface SpatialQuantizeOptions {
+  enabled?: boolean;          // true
+  topK?: number;              // 8
+  smoothness?: number;        // 0.35
+  edgeSigma?: number;         // 0.12
+  maxIterations?: number;     // 6
+  cleanupMaxSize?: number;    // 2
+  cleanupConfidence?: number; // 0.25
+}
+```
+
+能量：
+
+```text
+E = Σ CIEDE2000_data_cost(cell, label)
+  + λ Σ exp(-0.5 * (sourceEdge / edgeSigma)^2) * [neighbor labels differ]
+```
+
+相同能量使用确定性 tie-break；同输入与参数生成相同 Grid。
 
 ### 管线顺序
 
+```text
+foreground/background mask
+→ subject/aspect crop
+→ hidden-RGB extension
+→ optional smooth
+→ optional pre-quantize
+→ exact area/DPID GridSamples
+→ top-K CIEDE2000 candidates
+→ deterministic Potts/ICM
+→ confidence-aware region cleanup
+→ energy-aware maxColors/minBeads
+→ Grid + diagnostics
 ```
-1. colorQuantize（可选）
-2. buildForegroundMask（source flood；低置信度退化 alpha-only）
-3. mask-aware subject/aspect crop
-4. 基于 ForegroundMask 做 mask-aware crop/extension/smooth：coverage=0 不参与；gauss/guided 的 partial coverage 为权重，L0 使用 bbox + 最近前景常量延拓隔离（非数学加权 L0）
-5. area/DPID 一次直接输出目标 GridSamples，coverage 与最终 mask 不变
-6. matchDirectData / matchDitherData（CIEDE2000 最近色）
-7. despeckle / limitColorsIdx / mergeRareIdx（可选）
-8. 输出 Grid
-```
 
-注意：`despeckle → limitColorsIdx → mergeRareIdx` 的顺序会影响最终色数；`--max-colors 10 --min-beads 20` 时可能最终 <10。
+## Diagnostics
 
-### 导出 helpers
+`PipelineDiagnostics` 包含：
 
-`src/beadpattern/core.ts` 另导出：`buildBeadPalette`, `toGrid`, `cropToSubject`, `cropToAspectAligned`, `floodRemoveBg`, `matchDirectData`, `matchDitherData`, `despeckle`, `limitColorsIdx`, `mergeRareIdx`, `GridRgba`。
+- before/after `colorCount`、singleton/small-component ratio；
+- `fragmentationBefore/After`（component、boundary、adjacency、valid cells）；
+- optimizer/cleanup/color-budget/total energy；
+- optimizer iterations；
+- stage order 和 stage timings；
+- resample/integration passes；
+- operation budget 和各阶段操作数；
+- total time。
 
-## 渲染
-
-### Node 渲染（sharp）— `src/render/node.ts`
+## Board API 与质量档
 
 ```ts
-import { renderPatternPng, renderPatternSvg, countGridMaterials } from 'mirrorpin-core';
-// 或 import { renderPatternPng } from 'mirrorpin-core/render-node';
-
-const svg: string = renderPatternSvg(grid, opts);
-const png: Buffer = await renderPatternPng(grid, opts);
-const rows: MaterialRow[] = countGridMaterials(grid); // { code, hex, count } 按用量降序
+const result = generateForBoard(image, {
+  board: '78x78',
+  palette: 'mard221',
+  ...resolveQualityProfile('less'),
+});
 ```
 
-`RenderNodeOptions`:
+板规：`52x52 / 78x78 / 104x104 / 78x52`。
 
-| 字段 | 类型 | 默认 |
-|---|---|---|
-| `cell` | `number` | 40 |
-| `board` | `number` | 29 |
-| `codeFont` | `number` | 14 |
-| `coordFont` | `number` | 12 |
-| `showCodes` | `boolean` | true |
-| `showCoords` | `boolean` | true |
-| `textThreshold` | `number` | 140 |
-| `legend` | `boolean` | false（CLI 默认 true） |
-| `title` | `string` | — |
-| `paletteName` | `string` | `MARD 291` |
+质量档：
 
-`renderPatternSvg` 详见 `E:\M_Workbench\MirrorPin\src\render\node.ts`：标题栏 56px，图例行高 30px、列宽 196px，单列行数为 `floor((H - legendTop - 16) / 30)`，放不下自动分列。
+- `standard`：`minBeads=0`，spatial 0.35。
+- `less`：`minBeads=5`，spatial 0.48，提高 cleanup confidence。
+- `minimal`：`minBeads=10`，spatial 0.62，`maxColors=48`。
 
-### 浏览器渲染 — `src/render/pattern.ts`
+`generateForBoard(image, options, runtime)` 的 runtime 可传 diagnostics、progress 和 cancellation hook。
+
+## Worker 协议
+
+输入：
 
 ```ts
-import { renderPatternImage } from 'mirrorpin-core';
-const rgba: RgbaImage = renderPatternImage(grid, opts);
+{ type: 'generate', requestId, img, params }
+{ type: 'cancel', requestId }
 ```
 
-`RenderPatternOptions.title: number` 为标题区高度（像素），与 `RenderNodeOptions.title: string` 同名异型。
-
-### countGridMaterials
+输出：
 
 ```ts
-function countGridMaterials(grid: Grid): MaterialRow[] // { code, hex, count }[] 按 count 降序，同量按 code 升序
+{ type: 'progress', requestId, stage, progress, elapsedMs, algorithmVersion }
+{ type: 'done', requestId, grid, diagnostics, elapsedMs, algorithmVersion }
+{ type: 'cancelled', requestId, algorithmVersion }
+{ type: 'error', requestId, message, algorithmVersion }
 ```
 
-用于渲染图例与 CSV，两处共用同一统计，避免不一致。
+图片 `Uint8ClampedArray.buffer` 可作为 transferable 发送。消费端必须按 `requestId` 丢弃 stale result。
 
-## 其它模块
+## 渲染与材料
 
-- `src/core/pipeline.ts`: `generatePattern` / `generatePatternMapFirst` / `generatePatternAdvanced` / `generatePatternSoft`（历史多管线，仅 `generatePatternBead` 为当前主线）。
-- `src/core/preprocess.ts`: `boxBlur`, `gaussianBlur`。
-- `src/core/l0.ts`: `l0Smooth` 使用非周期 Neumann 梯度/伴随负散度和确定性 Jacobi-PCG；导出 `neumannGradient`、`neumannNegativeDivergence`、`applyNeumannSystem`、`solveNeumannSystem` 供边界/残差测试和高级集成使用。PCG 默认最多 200 次、相对残差容差 `1e-8`，未收敛会明确报错；不做 periodic padding，1×N/N×1/非 2 次幂尺寸可直接处理。工作区复用并受 64 MiB 估算预算门禁（`l0MemoryBudget`）。这是与 mask 外常量延拓匹配的工程离散边界条件，不保证与论文 MATLAB 逐像素相同。
-- `src/core/subject.ts`: `estimateBackground`, `computeBBox`, `cropSquare`。
-- `src/beadpattern/ciede2000.ts`: `srgbToLab`, `ciede2000`, `Lab`。
-- `src/core/color.ts`: `srgbToOklab`, `oklabDistance`, `hexToRgb`, `rgbToHex`（Oklab 体系，bead 管线用 Lab/CIEDE2000）。
+```ts
+const png = await renderPatternPng(grid, { legend: true, paletteName: 'MARD 221' });
+const rgba = renderPatternImage(grid, { cell: 40, board: 29 });
+const materials = countGridMaterials(grid);
+```
+
+`countGridMaterials()` 返回 `{code,hex,count}[]`，按用量降序、同量按 code 升序；Node 与浏览器渲染器共同使用。
+
+## 验收 API
+
+```ts
+const fixture = createAcceptanceFixture('text-lines', 78, 52);
+const metrics = computeAcceptanceMetrics(samples, labels, fixture.palette, fixture.truth);
+const canonical = canonicalGridString(grid);
+```
+
+指标包括 mean/P95 CIEDE2000、fragmentation、flat transitions、edge precision/recall/F1、thin-line label recall、颜色数与低用量色数。
+
+## Legacy
+
+`generatePattern*` 四套旧入口、`despeckle`、`limitColorsIdx`、`mergeRareIdx` 继续导出以兼容旧代码。新产品应只使用 `generatePatternBead()` / `generateForBoard()`。

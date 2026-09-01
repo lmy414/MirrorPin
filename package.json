@@ -1,7 +1,7 @@
 {
   "name": "mirrorpin-core",
   "version": "0.3.0",
-  "description": "拼豆图纸生成工具 · 算法内核（M1：L0/引导滤波保边 + DPID 保细节降采样）",
+  "description": "拼豆图纸生成工具 · Alpha-aware 采样、CIEDE2000 与边缘感知空间量化内核",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,7 +35,9 @@
     "test:watch": "vitest",
     "prepare": "npm run build",
     "build:webapp": "node scripts/build-webapp.mjs",
+    "build:webapp-deploy": "node scripts/build-webapp-deploy.mjs",
     "build:minitool": "node scripts/build-minitool.mjs",
+    "acceptance": "node scripts/acceptance-bench.mjs",
     "serve:minitool": "node scripts/serve-minitool.mjs",
     "serve:webapp": "node scripts/serve-webapp.mjs",
     "webapp": "npm run build:webapp && npm run serve:webapp"
@@ -48,9 +50,11 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@tailwindcss/cli": "^4.1.13",
     "@types/pngjs": "^6.0.5",
     "esbuild": "^0.27.7",
     "pngjs": "^7.0.0",
+    "tailwindcss": "^4.1.13",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.1.0"

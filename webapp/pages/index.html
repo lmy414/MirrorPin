@@ -101,33 +101,7 @@ html {
 }
 
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
-    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <style type="text/tailwindcss">
-  @theme inline {
-    --color-background: var(--mirrorpin-background);
-    --color-foreground: var(--mirrorpin-foreground);
-    --color-card: var(--mirrorpin-card);
-    --color-card-foreground: var(--mirrorpin-card-foreground);
-    --color-popover: var(--mirrorpin-popover);
-    --color-popover-foreground: var(--mirrorpin-popover-foreground);
-    --color-primary: var(--mirrorpin-primary);
-    --color-primary-foreground: var(--mirrorpin-primary-foreground);
-    --color-muted: var(--mirrorpin-muted);
-    --color-muted-foreground: var(--mirrorpin-muted-foreground);
-    --color-border: var(--mirrorpin-border);
-    --color-input: var(--mirrorpin-input);
-    --color-ring: var(--mirrorpin-ring);
-    --radius-sm: var(--mirrorpin-radius-sm);
-    --radius-md: var(--mirrorpin-radius-md);
-    --radius-lg: var(--mirrorpin-radius-lg);
-  }
-  @layer base {
-    body { background: var(--mirrorpin-background); color: var(--mirrorpin-foreground); }
-    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
-    th { @apply whitespace-nowrap; }
-  }
-    </style>
+    <link rel="stylesheet" href="../app/styles.css">
     <style id="semantic-token-fallback">
       .bg-background { background-color: var(--mirrorpin-background); }
       .text-background { color: var(--mirrorpin-background); }
@@ -208,16 +182,14 @@ html {
         <i data-lucide="grid-3x3" class="h-5 w-5 text-primary"></i>
         MirrorPin
       </a>
-      <a href="https://github.com/MirrorPin" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors">
-        <i data-lucide="github" class="h-5 w-5"></i>
-      </a>
+      <span class="text-xs font-medium text-muted-foreground">浏览器本地版</span>
     </div>
   </header>
 
   <main class="flex-1 w-full">
     <div class="mx-auto max-w-3xl px-6 py-10 space-y-10">
 
-      <section data-region="upload" class="space-y-3">
+      <section data-region="upload" class="mirrorpin-surface mirrorpin-section space-y-4">
         <h2 class="mirrorpin-heading text-xl text-foreground">上传图片</h2>
         <div id="upload-zone" data-dom-id="upload-zone" class="group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-border bg-card p-10 text-center transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabindex="0" role="button" aria-label="上传图片">
           <input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only">
@@ -247,7 +219,7 @@ html {
         </div>
       </section>
 
-      <section data-region="board-presets" class="space-y-4">
+      <section data-region="board-presets" class="mirrorpin-surface mirrorpin-section space-y-4">
         <h2 class="mirrorpin-heading text-xl text-foreground">选择板规</h2>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <label id="board-preset-52x52" data-dom-id="board-preset-52x52" class="preset-card relative flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center transition-all hover:border-primary/60 hover:shadow-sm focus-within:ring-2 focus-within:ring-ring">
@@ -299,7 +271,7 @@ html {
         </div>
       </section>
 
-      <section data-region="primary-params" class="space-y-6">
+      <section data-region="primary-params" class="mirrorpin-surface mirrorpin-section space-y-6">
         <h2 class="mirrorpin-heading text-xl text-foreground">主要参数</h2>
 
         <div class="space-y-2">
@@ -336,7 +308,7 @@ html {
           <p class="text-xs text-muted-foreground">标准 = 不合并；颜色更少 = 少于 5 豆的色块合并；颜色最少 = 少于 10 豆的色块合并</p>
         </div>
 
-        <div class="flex items-start justify-between gap-4 rounded-xl border border-border bg-card p-4">
+        <div class="mirrorpin-subtle-panel flex items-start justify-between gap-4 p-4">
           <div class="space-y-1">
             <label for="remove-bg-toggle" class="text-sm font-medium text-foreground">抠白底</label>
             <p class="text-xs text-muted-foreground">去掉纸上的白底。若浅发末梢被误合，请关闭重试。</p>
@@ -348,23 +320,23 @@ html {
       </section>
 
       <section data-region="advanced" class="space-y-3">
-        <button id="advanced-toggle" data-dom-id="advanced-toggle" type="button" class="flex w-full items-center justify-between rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button id="advanced-toggle" data-dom-id="advanced-toggle" type="button" class="mirrorpin-surface flex w-full items-center justify-between p-4 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span class="text-sm font-medium text-foreground">高级设置</span>
           <i data-lucide="chevron-down" class="h-4 w-4 text-muted-foreground transition-transform duration-200"></i>
         </button>
-        <div id="advanced-body" data-region="advanced-body" data-dom-id="advanced-body" class="hidden space-y-6 rounded-xl border border-border bg-card p-4">
+        <div id="advanced-body" data-region="advanced-body" data-dom-id="advanced-body" class="mirrorpin-surface mirrorpin-section hidden space-y-6">
 
           <div class="space-y-2">
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <span class="text-sm font-medium text-foreground">平滑</span>
-                <p class="text-xs text-muted-foreground">默认：l0 标准</p>
+                <p class="text-xs text-muted-foreground">默认：弱引导滤波</p>
               </div>
               <button type="button" class="reset-link shrink-0 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">恢复默认</button>
             </div>
             <div class="flex flex-wrap gap-2">
               <label class="smooth-card cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm transition-all hover:border-primary/60 focus-within:ring-2 focus-within:ring-ring">
-                <input type="radio" name="smooth" value="l0" class="sr-only" checked data-default="true">
+                <input type="radio" name="smooth" value="l0" class="sr-only">
                 <span class="font-medium text-foreground">l0 标准</span>
               </label>
               <label class="smooth-card cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm transition-all hover:border-primary/60 focus-within:ring-2 focus-within:ring-ring">
@@ -372,7 +344,7 @@ html {
                 <span class="font-medium text-foreground">l0 弱</span>
               </label>
               <label class="smooth-card cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm transition-all hover:border-primary/60 focus-within:ring-2 focus-within:ring-ring">
-                <input type="radio" name="smooth" value="guided" class="sr-only">
+                <input type="radio" name="smooth" value="guided" class="sr-only" checked data-default="true">
                 <span class="font-medium text-foreground">引导滤波</span>
               </label>
               <label class="smooth-card cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm transition-all hover:border-primary/60 focus-within:ring-2 focus-within:ring-ring">
@@ -390,19 +362,35 @@ html {
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <span class="text-sm font-medium text-foreground">缩放算法</span>
-                <p class="text-xs text-muted-foreground">默认：DPID</p>
+                <p class="text-xs text-muted-foreground">默认：精确面积</p>
               </div>
               <button type="button" class="reset-link shrink-0 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">恢复默认</button>
             </div>
             <div class="flex gap-2">
               <label class="scale-card cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm transition-all hover:border-primary/60 focus-within:ring-2 focus-within:ring-ring">
-                <input type="radio" name="scale" value="dpid" class="sr-only" checked data-default="true">
+                <input type="radio" name="scale" value="dpid" class="sr-only">
                 <span class="font-medium text-foreground">DPID</span>
               </label>
               <label class="scale-card cursor-pointer rounded-lg border border-border px-3 py-1.5 text-sm transition-all hover:border-primary/60 focus-within:ring-2 focus-within:ring-ring">
-                <input type="radio" name="scale" value="box" class="sr-only">
-                <span class="font-medium text-foreground">BOX</span>
+                <input type="radio" name="scale" value="area" class="sr-only" checked data-default="true">
+                <span class="font-medium text-foreground">精确面积</span>
               </label>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center justify-between rounded-lg border border-border p-3">
+              <div>
+                <label for="spatial-toggle" class="text-sm font-medium text-foreground">空间优化</label>
+                <p class="text-[10px] text-muted-foreground">默认开启，减少平坦区域杂色</p>
+              </div>
+              <button id="spatial-toggle" type="button" role="switch" aria-checked="true" data-default="true" class="toggle-switch relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span class="translate-x-4 inline-block h-4 w-4 transform rounded-full bg-card transition-transform"></span>
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="space-y-1"><span class="text-xs text-muted-foreground">空间强度</span><input id="spatial-strength" type="number" min="0" step="0.05" value="0.35" data-default="0.35" class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm"></label>
+              <label class="space-y-1"><span class="text-xs text-muted-foreground">清理区域上限</span><input id="cleanup-size" type="number" min="0" step="1" value="2" data-default="2" class="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm"></label>
             </div>
           </div>
 
@@ -482,7 +470,7 @@ html {
       </section>
 
       <section data-region="generate" class="space-y-3 pt-2">
-        <button id="generate-cta" data-dom-id="generate-cta" type="button" disabled class="mx-auto block w-full max-w-md rounded-lg bg-primary px-6 py-3.5 text-center text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-primary">
+        <button id="generate-cta" data-dom-id="generate-cta" type="button" disabled class="mirrorpin-primary-button mx-auto block w-full max-w-md rounded-xl px-6 py-3.5 text-center text-base font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50">
           生成图纸
         </button>
         <p class="text-center text-xs text-muted-foreground">生成过程在你的浏览器中完成，可能需要几秒到几十秒。</p>
@@ -501,97 +489,7 @@ html {
     <i data-lucide="arrow-up" class="h-5 w-5"></i>
   </a>
 
-  <style>
-    .preset-card:has(input:checked),
-    .complexity-card:has(input:checked),
-    .smooth-card:has(input:checked),
-    .scale-card:has(input:checked) {
-      background-color: var(--mirrorpin-primary-50);
-      border-color: var(--mirrorpin-primary);
-      border-width: 2px;
-    }
-    .preset-card:has(input:checked) svg {
-      color: var(--mirrorpin-primary);
-    }
-    .toggle-switch span {
-      pointer-events: none;
-    }
-  </style>
-
-  <script>
-    lucide.createIcons();
-
-    const uploadZone = document.getElementById('upload-zone');
-    const uploadInput = document.getElementById('upload-input');
-    const uploadEmpty = document.getElementById('upload-empty');
-    const uploadFilled = document.getElementById('upload-filled');
-    const generateCta = document.getElementById('generate-cta');
-    const advancedToggle = document.getElementById('advanced-toggle');
-    const advancedBody = document.getElementById('advanced-body');
-    const advancedChevron = advancedToggle.querySelector('[data-lucide="chevron-down"]');
-
-    uploadZone.addEventListener('click', () => uploadInput.click());
-    uploadZone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); uploadInput.click(); }});
-
-    uploadInput.addEventListener('change', () => {
-      if (uploadInput.files && uploadInput.files[0]) {
-        uploadEmpty.classList.add('hidden');
-        uploadFilled.classList.remove('hidden');
-        uploadFilled.classList.add('flex');
-        generateCta.disabled = false;
-        uploadZone.classList.remove('border-dashed');
-        uploadZone.classList.add('border-solid');
-      }
-    });
-
-    document.querySelector('#upload-filled button').addEventListener('click', (e) => {
-      e.stopPropagation();
-      uploadInput.click();
-    });
-
-    advancedToggle.addEventListener('click', () => {
-      const isHidden = advancedBody.classList.toggle('hidden');
-      advancedChevron.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
-    });
-
-    function setToggle(btn, next) {
-      btn.setAttribute('aria-checked', String(next));
-      btn.classList.toggle('bg-primary', next);
-      btn.classList.toggle('bg-muted', !next);
-      const knob = btn.querySelector('span');
-      const isLarge = btn.classList.contains('h-6');
-      knob.classList.toggle(isLarge ? 'translate-x-5' : 'translate-x-4', next);
-      knob.classList.toggle('translate-x-0', !next);
-    }
-
-    function bindToggle(btn) {
-      btn.addEventListener('click', () => {
-        const checked = btn.getAttribute('aria-checked') === 'true';
-        setToggle(btn, !checked);
-      });
-    }
-
-    bindToggle(document.getElementById('remove-bg-toggle'));
-    bindToggle(document.getElementById('dither-toggle'));
-    bindToggle(document.getElementById('despeckle-toggle'));
-
-    document.querySelectorAll('.reset-link').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const group = link.closest('.space-y-2');
-        if (!group) return;
-        group.querySelectorAll('input[type="radio"]').forEach(r => {
-          r.checked = r.dataset.default === 'true';
-        });
-        group.querySelectorAll('input[type="number"]').forEach(num => {
-          if (num.dataset.default !== undefined) num.value = num.dataset.default;
-        });
-        group.querySelectorAll('.toggle-switch').forEach(btn => {
-          setToggle(btn, btn.dataset.default === 'true');
-        });
-      });
-    });
-  </script>
+  <script type="module" src="../app/icons.mjs"></script>
   <script type="module" src="../app/main.mjs"></script>
 </body>
 </html>

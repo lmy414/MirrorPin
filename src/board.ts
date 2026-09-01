@@ -2,9 +2,9 @@
 // - 用户选：图片、板规、色卡、稀有色阈值、是否抠白底（其余底层参数内部固化）
 // - 高级（折叠）：平滑/降采样/限色/抖动/阈值/渲染像素值
 
-import type { ColorQuantizeOptions, RgbaImage, Grid } from './core/types';
+import type { ColorQuantizeOptions, RgbaImage, Grid, PipelineDiagnostics } from './core/types';
 import { DEFAULT_GENERATION_OPTIONS } from './core/options';
-import { generatePatternBead, type SmoothKind, type ScaleKind } from './beadpattern/core';
+import { generatePatternBead, type SmoothKind, type ScaleKind, type ProgressHook } from './beadpattern/core';
 import type { SpatialQuantizeOptions } from './core/types';
 import { MARD291, MARD221 } from './palettes/mard291';
 
@@ -25,7 +25,7 @@ export interface BoardAdvancedOptions {
   colors?: number;
   /** 保边平滑。 */
   smooth?: SmoothKind;
-  /** L0 的 λ，默认 0.02；board 默认 smooth=guided，CLI 默认 smooth=l0。 */
+  /** L0 的 λ，默认 0.02；clean 产品默认 smooth=guided。 */
   smoothLambda?: number;
   /** gauss 的 σ，默认 1 */
   smoothSigma?: number;
@@ -72,10 +72,17 @@ export interface GenerateResult {
   /** 内存网格（渲染与清单均由此派生） */
   grid: Grid;
   mode: 'cropped-and-filled' | 'auto-fit';
+  diagnostics?: Partial<PipelineDiagnostics>;
+}
+
+export interface BoardGenerationRuntime {
+  diagnostics?: Partial<PipelineDiagnostics>;
+  onProgress?: ProgressHook;
+  shouldCancel?: () => boolean;
 }
 
 /** 顶层生成：一次设置一次导出，高级设置默认折叠。 */
-export function generateForBoard(img: RgbaImage, opts: TopLevelOptions): GenerateResult {
+export function generateForBoard(img: RgbaImage, opts: TopLevelOptions, runtime: BoardGenerationRuntime = {}): GenerateResult {
   const spec = BOARD_PRESETS[opts.board];
   if (!spec) throw new Error(`未知板规: ${opts.board}`);
   const palette = opts.palette === 'mard291' ? MARD291 : MARD221;
@@ -102,8 +109,11 @@ export function generateForBoard(img: RgbaImage, opts: TopLevelOptions): Generat
     backgroundTolerance: a?.backgroundTolerance,
     removeBg: opts.removeBg ? 'flood' : 'none',
     colorQuantize,
+    diagnostics: runtime.diagnostics,
+    onProgress: runtime.onProgress,
+    shouldCancel: runtime.shouldCancel,
   });
 
   const ok = grid.cols === spec.w && grid.rows === spec.h;
-  return { grid, mode: ok ? 'cropped-and-filled' : 'auto-fit' };
+  return { grid, mode: ok ? 'cropped-and-filled' : 'auto-fit', diagnostics: runtime.diagnostics };
 }

@@ -1,6 +1,8 @@
 // MirrorPin 算法内核（M0）公共出口
 
 export { MARD291, MARD221, type MardSwatch } from './palettes/mard291';
+export { ALGORITHM_VERSION } from './version';
+export { QUALITY_PROFILES, resolveQualityProfile, type QualityProfileId, type QualityProfileOptions } from './product-profiles';
 // MardSwatch 与 Swatch 同构，保留别名以兼容历史导入
 
 export type {
@@ -102,6 +104,8 @@ export {
   type ScaleKind,
   type ResampleEvent,
   type ResampleHook,
+  type GenerationDetails,
+  type DetailedResultHook,
   type GenerationStage,
   type ProgressEvent,
   type ProgressHook,
@@ -130,12 +134,24 @@ export { renderPatternImage, type RenderPatternOptions } from './render/pattern'
 export { renderPatternSvg, renderPatternPng, type RenderNodeOptions } from './render/node';
 export { countGridMaterials, type MaterialRow } from './core/materials';
 export {
+  canonicalGridString,
+  computeAcceptanceMetrics,
+  type AcceptanceTruth,
+  type AcceptanceMetrics,
+} from './core/metrics';
+export {
+  createAcceptanceFixture,
+  type AcceptanceFixture,
+  type AcceptanceFixtureId,
+} from './core/acceptance-fixtures';
+export {
   BOARD_PRESETS,
   generateForBoard,
   type BoardAdvancedOptions,
   type BoardAdvancedOptions as AdvancedOptions,
   type BoardSpec,
   type GenerateResult as BoardGenerateResult,
+  type BoardGenerationRuntime,
   type PaletteId,
   type TopLevelOptions as BoardOptions,
 } from './board';

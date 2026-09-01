@@ -1,193 +1,163 @@
 # MirrorPin · 拼豆图纸生成工具
 
-把任意图片转成**可采购的拼豆图纸**：降噪预处理 → 转像素（CIEDE2000 感知配色）→ 输出带色号/坐标的正式图纸 PNG 与材料清单 CSV。
+MirrorPin 把图片转换为可直接发布和采购的拼豆图纸：输出带色号、坐标、板界与内嵌材料清单的 PNG，并可另存 `code,hex,count` CSV。核心算法为纯 TypeScript，可在 Node.js、CLI 和浏览器 Web Worker 中运行。
 
-项目同时提供**算法库**（纯 TS，无 DOM 依赖，浏览器/Node 通用）与**命令行工具 CLI**；浏览器前端在 `web/` 目录，M1 迭代中。
+## 0.3.0 重点
 
-## 特性
+- **统一干净模式**：弱 Guided 平滑 + 线性光、Alpha-aware 精确面积采样 + top-K MARD CIEDE2000 候选 + 边缘敏感 Potts/ICM 空间优化。
+- **减少无意义杂色**：低置信度小区域清理、空间感知 `minBeads`、能量感知 `maxColors`，避免全图盲目替换。
+- **保护真实细节**：强边缘、文字、一格线条、窄长结构和高置信度高光不会按普通孤点处理。
+- **统一 Alpha**：连续 coverage 用于颜色积分；`coverage >= 0.5`（等价于源 Alpha 阈值 128）才进入拼豆标签域；透明隐藏 RGB 不污染边缘。
+- **浏览器本地运行**：生成在 Web Worker 中执行，带真实阶段进度、取消、诊断和 stale-result 防护；图片与结果不上传、不写入服务器。
+- **MARD 色卡**：内置 MARD 291 与标准 MARD 221。
 
-- **预处理**：内置 L0 梯度最小化 / 高斯 / 引导滤波；默认分层明确为：库 `none+box`、board `guided+dpid`、CLI `l0+dpid`。L0 使用非周期 Neumann + PCG，并设置可诊断的 64 MiB 工作区预算。
-- **转像素**：以 TS 忠实重写 [bead-pattern](https://github.com/wuZHeBoy/bead-pattern) 的整套思路——主体裁剪、保细节降采样（DPID，细节权重偏离均值越大越高）、完整 **CIEDE2000** 感知配色、源图阶段安全置信度 flood 前景 mask、despeckle 除杂、limit_colors 限色、稀有色合并。
-- **固定色卡**：内置 **MARD 291** 官方瓶身色号（如 `A1`/`B5`），另可切换 **MARD 221** 标准色卡（A–H/M 系列 221 色）；输出可直接按色号采购。
-- **输出**：正式图纸 PNG（标题栏 + 每格色号 + 坐标 + 网格线 + 板界 + **内嵌材料清单**）+ 材料清单 CSV。
-- **稀有色合并**：`--min-beads` 把用量过少的色号就近并入 CIEDE2000 最近的在用色，避免“买一包只用一两颗”。
+## 安装与验证
+
+```bash
+cd E:\M_Workbench\MirrorPin
+npm install
+npm run build
+npm test
+npm run test:regression
+npx tsc --noEmit
+```
+
+## CLI
+
+```bash
+node E:\M_Workbench\MirrorPin\dist\cli.js <input> -o <output.png> [选项]
+node E:\M_Workbench\MirrorPin\dist\cli.js <input> --materials <materials.csv> [选项]
+node E:\M_Workbench\MirrorPin\dist\cli.js --help
+```
+
+CLI 0.3.0 默认：`guided + area + spatial on + top-K 8`，预降色关闭，抖动关闭。
+
+| 选项 | 默认 | 说明 |
+|---|---:|---|
+| `--max-side <n>` | 64 | 网格最大边长 |
+| `--palette <mard291\|mard221>` | mard291 | 使用的 MARD 色卡 |
+| `--smooth <none\|gauss\|guided\|l0\|l0soft>` | guided | 源图保边平滑 |
+| `--scale <area\|box\|dpid>` | area | 目标网格采样；`box` 为 area 兼容名 |
+| `--colors <n>` | 0 | 可选预降色，0 为关闭 |
+| `--spatial-strength <n>` | 0.35 | Potts 空间平滑强度 |
+| `--spatial-top-k <n>` | 8 | 每格 CIEDE2000 候选数 |
+| `--cleanup-size <n>` | 2 | 低置信度小区域清理上限 |
+| `--no-spatial` | 关 | 关闭空间优化，使用兼容逐格匹配 |
+| `--min-beads <n>` | 0 | 空间分量级稀有色合并阈值 |
+| `--max-colors <n>` | 不限 | 最终色号预算 |
+| `--remove-bg <none\|flood>` | none | 源图安全置信度背景 flood |
+| `--dither` | 关 | Floyd–Steinberg 风格分支；不可与 spatial 同开 |
+| `--no-legend` | 关 | 关闭 PNG 右侧内嵌材料清单 |
+
+示例：
+
+```bash
+node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" \
+  -o "E:\M_Workbench\MirrorPin\output\Q13_pattern.png" \
+  --materials "E:\M_Workbench\MirrorPin\output\Q13_materials.csv" \
+  --palette mard221 --min-beads 5
+```
+
+## 算法主管线
+
+```text
+validate
+→ source foreground/background mask
+→ mask-aware subject crop + aspect fill
+→ transparent RGB extension
+→ optional Guided/Gauss/L0 smooth
+→ optional deterministic pre-quantization
+→ linear-light Alpha-aware area/DPID sampling to GridSamples
+→ top-K MARD CIEDE2000 candidates
+→ edge-sensitive deterministic Potts/ICM
+→ confidence-aware connected-component cleanup
+→ energy-aware maxColors/minBeads
+→ Grid + diagnostics
+```
+
+公共入口：
+
+```ts
+import {
+  generatePatternBead,
+  generateForBoard,
+  MARD221,
+  renderPatternPng,
+  countGridMaterials,
+} from 'mirrorpin-core';
+```
+
+`generatePatternBead()` 是唯一产品主管线。`E:\M_Workbench\MirrorPin\src\core\pipeline.ts` 的旧多管线入口仅保留兼容，不用于 CLI、Webapp 或 minitool 默认生成。
+
+## Webapp
+
+```bash
+cd E:\M_Workbench\MirrorPin
+npm run build:webapp
+npm run serve:webapp
+```
+
+打开 [http://localhost:5173/](http://localhost:5173/)。Webapp 使用 IndexedDB 在页面间保存本地图片、参数、Grid、diagnostics、schema version 和 algorithm version；所有计算仍在浏览器内完成。
+
+三种质量档：
+
+- `standard`：默认空间一致性，不强制删除低用量色。
+- `less`：提高空间强度并启用 `minBeads=5`。
+- `minimal`：更强空间约束、`minBeads=10`，并使用 48 色最终预算。
+
+生成可上传到普通静态服务器的自包含包：
+
+```bash
+npm run build:webapp-deploy
+```
+
+产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip`。ZIP 根目录含 `index.html`，无需 rewrite；服务器需将 `.mjs` 返回为 JavaScript MIME。
+
+## Minitool
+
+```bash
+npm run build:minitool
+```
+
+产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-minitool.zip`。minitool 与 Webapp 使用同一 Worker 协议、算法版本和质量 profile。
+
+## 验收工具
+
+```bash
+npm run build
+npm run acceptance -- --boards 52x52,78x78,104x104,78x52 --runs 3
+```
+
+验收输出位于 `E:\M_Workbench\MirrorPin\output\acceptance\<timestamp>\`，包含：
+
+- `manifest.json`、`metrics.json`、`timing.json`；
+- 每素材/板规的 baseline 与 clean PNG、指标和三次 SHA-256；
+- `comparison-sheet.png`。
+
+确定性合成素材提供 flat-region、edge 和 thin-line 真值；本地 Q13 只报告可证明的哈希、色数、碎片和性能，不伪造语义标注，也不会提交用户图片。
+
+最近一次完整验收（2026-09-01）覆盖 20 个素材/板规案例，三次 Grid SHA-256 全部一致，合成语义硬门禁 80/80 通过。报告位于 `E:\M_Workbench\MirrorPin\output\acceptance\2026-09-01T14-28-33-628Z\manifest.json`。
+
+## 输出说明
+
+- PNG：标题、每格色号、坐标、网格线、板界、材料清单。
+- CSV：`code,hex,count`，按用量降序。
+- MARD 色值是屏幕近似值，采购与成品颜色以实物色卡为准。
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 核心 | TypeScript，纯计算无 DOM 依赖（浏览器/Node 皆可用） |
-| CLI 渲染 | sharp（native，仅 Node 端用于 PNG 编码/解码） |
-| 构建 | tsup（库）+ esbuild（CLI） |
-| 测试 | vitest |
-
-## 安装
-
-```bash
-npm install          # 安装依赖（含 sharp 原生模块，需良好网络；Windows 下若失败可重试）
-npm run build        # 产出 dist/（库 + cli.js）
-npm test             # 运行测试
-```
-
-## CLI 用法
-
-```bash
-node E:\M_Workbench\MirrorPin\dist\cli.js <input> -o <output.png> [选项]
-node E:\M_Workbench\MirrorPin\dist\cli.js <input> --materials <清单.csv> [选项]
-node E:\M_Workbench\MirrorPin\dist\cli.js --help       # 查看帮助
-node E:\M_Workbench\MirrorPin\dist\cli.js --version    # 查看版本
-```
-
-### 选项
-
-| 选项 | 说明 | 默认 |
-|---|---|---|
-| `-o, --output <path>` | 输出图纸 PNG | 必填（与 --materials 二选一） |
-| `--materials <path>` | 输出材料清单 CSV（表头 `code,hex,count`） | 不输出 |
-| `--max-side <n>` | 网格最大边长（另一边按比例），需为正整数 | 64 |
-| `--blur <sigma>` | 兼容旧别名；显式时启用高斯平滑并覆盖 `--smooth`（正数；`0` 表示关闭） | 无默认值；未指定时别名不启用，实际 `smooth=l0` |
-| `--no-blur` | 兼容旧别名；显式时关闭平滑 | 未指定时实际 `smooth=l0` |
-| `--smooth <kind>` | 保边平滑：`none/gauss/guided/l0`；`--smooth-sigma` 调参（gauss=σ，l0=λ） | l0 |
-| `--scale <kind>` | 降采样：`box`（面积平均）/ `dpid`（保细节，默认） | dpid |
-| `--colors <n>` | 预处理降色数（0=不降色） | 64 |
-| `--max-colors <n>` | 最终色号上限 | 不限制 |
-| `--min-beads <n>` | 稀有色合并：用量 < n 的色号并入 CIEDE2000 最近在用色 | 不合并 |
-| `--remove-bg <none\|flood>` | 源图阶段安全置信度背景 flood（CIEDE2000 阈值 12；不确定时保守不删） | none |
-| `--no-crop` | 关闭透明通道裁剪 | 默认裁剪 |
-| `--despeckle` | 清理 <2 格的杂点 | 关 |
-| `--dither` | 抖动（照片渐变用，会导致色号增多） | 关 |
-| `--board <n>` | 板界线间隔 | 29 |
-| `--palette <name>` | 色卡：`mard291`（含扩展 70 色）/ `mard221`（标准 A-H/M 221 色） | mard291 |
-| `--no-legend` | 关闭图纸内嵌材料清单面板 | 默认开启 |
-| `-h, --help` | 显示帮助 | — |
-| `-V, --version` | 显示版本 | — |
-
-### 示例
-
-```bash
-# 生成图纸 + 材料清单
-node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" -o "E:\M_Workbench\MirrorPin\output\Q13_pattern.png" --materials "E:\M_Workbench\MirrorPin\output\Q13_materials.csv" --max-side 64 --blur 2 --colors 48
-
-# 只用材料清单，不输出图纸
-node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" --materials "E:\M_Workbench\MirrorPin\output\Q13_materials.csv"
-
-# 标准 221 色卡 + 稀有色合并 + 关闭模糊
-node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" -o "E:\M_Workbench\MirrorPin\output\Q13_pattern_mard221.png" --materials "E:\M_Workbench\MirrorPin\output\Q13_materials_mard221.csv" --palette mard221 --min-beads 5 --no-blur --colors 0
-```
-
-### 图纸说明
-
-- 每格居中色号（亮底黑字/暗底白字），四周行列坐标（每 5 格标注），网格线每格细线/每 10 格粗线/板界红线，背景透明区为浅棋盘。
-
-- 顶部标题栏：`MirrorPin 拼豆图纸 · W×H 格 · N 色 · 合计 M 豆 · 色卡 MARD 291/221`。
-- 右侧材料清单面板：色块 + 色号 + 色值 + 用量（×n），按用量降序，单列放不下自动分列；副标题 `MARD 291/221 · N 色 · 合计 M 颗`。
-- CSV 表头 `code,hex,count`，如 `C29,#4B5BA3,619`。
-
-## 算法库
-
-入口 `src/index.ts`。核心导出：`generatePatternBead`（转像素主管线；`smooth: l0|guided|gauss|none` + `scale: dpid|box`，库默认 `none+box`；board/CLI 默认见下）、`l0Smooth`/`guidedSmooth`/`dpidDownscale`/`gaussianBlur`（预处理/降采样）、`renderPatternPng`/`renderPatternSvg`/`countGridMaterials`（渲染与统计）、`MARD291`/`MARD221`（色卡）。
-
-### L0 边界与资源语义
-
-`l0Smooth` 使用非周期 Neumann 离散梯度：最右/最下 forward gradient 为 0，负散度是其严格伴随；每个半二次外循环的 `(I + beta DᵀD)S = I + beta DᵀV` 子问题由确定性的 Jacobi-PCG 求解（默认最多 200 次、相对容差 `1e-8`，未收敛会报错）。因此不再做 2 次幂 periodic FFT padding，`1×N`、`N×1` 和任意尺寸均直接工作。为避免大图分配失控，核心复用工作数组并在分配前按 64 MiB 上限估算；预算信息通过 `l0MemoryBudget` 导出。该边界条件是工程上与 mask 外常量延拓一致的离散语义，不宣称与论文 MATLAB 逐像素完全一致。
-
-```ts
-import {
-  generatePatternBead,
-  MARD291,
-  MARD221,
-  gaussianBlur,
-  renderPatternPng,
-  countGridMaterials,
-} from 'mirrorpin-core';
-
-const grid = generatePatternBead(image, {
-  palette: MARD221,        // 或 MARD291
-  maxSide: 72,             // 库默认 50，CLI 默认 64
-  cropToSubject: true,
-  despeckle: false,
-  maxColors: undefined,    // 不限色
-  minBeads: 5,             // 稀有色合并阈值
-});
-const png = await renderPatternPng(grid, { legend: true, paletteName: 'MARD 221' });
-const rows = countGridMaterials(grid); // { code, hex, count }[]
-```
-
-### 管线
-
-```
-source ForegroundMask → mask-aware crop/extension/smooth（mask=0 不参与；gauss/guided 对 partial coverage 作权重，L0 采用 bbox + 最近前景常量延拓的工程隔离语义）
-→ 一次 area/DPID 重采样到网格（coverage/最终 alpha 不变）→ CIEDE2000 最近色号
-→ (可选) despeckle 去杂 / limit_colors 限色 / 稀有色合并(mergeRareIdx) / dither
-→ 正式图纸渲染(色号+坐标+网格+板界+图例) + 材料清单
-```
-
-后处理顺序：`despeckle → limitColorsIdx → mergeRareIdx`；详见 `docs/API.md`。
-
-### 双渲染器
-
-| 模块 | 用途 | 依赖 |
-|---|---|---|
-| `src/render/node.ts` | Node/CLI：SVG + sharp 真 TTF 抗锯齿，含图例/标题栏 | sharp |
-| `src/render/pattern.ts` | 浏览器/内存：位图字体，自包含零依赖 | 无 |
-
-`RenderNodeOptions.title: string`（标题文字）与 `RenderPatternOptions.title: number`（标题区高度像素）同名异型，见 `docs/API.md`。
-
-## 目录结构
-
-```
-src/
-  beadpattern/   # CIEDE2000 + 转像素核心（TS 重写自 bead-pattern 思路）
-  core/          # 类型 / 颜色 / 量化 / 采样 / 预处理 / 后处理
-  palettes/      # MARD 291/221 色卡
-  render/        # 正式图纸渲染（node/sharp + 浏览器/内存）
-cli/             # CLI 入口
-web/             # 浏览器前端（M1，Vite + React，独立 npm 项目，见 web/README.md）
-tests/           # 单元测试
-docs/
-  API.md         # 算法库 API
-  design/M0-review.md  # M0 归档文档
-```
-
-## 浏览器前端（web）
-
-`web/` 为独立 Vite 项目（非 npm workspaces），通过 `@lib -> ../src` 别名复用算法库。
-
-```bash
-cd E:\M_Workbench\MirrorPin\web
-npm install
-npm run dev      # 本地预览
-npm run build    # 生产构建
-```
-
-当前 `web/src/App.tsx` 为基础预览（上传→参数→预览→导出），`konva`/`react-konva` 已安装但尚未接入，仍为 Canvas 2D 直绘；后续迭代接入。
+| 核心 | TypeScript，浏览器/Node 通用纯计算 |
+| CLI | Node.js + sharp |
+| Webapp/minitool | 静态 HTML/JavaScript + Web Worker + IndexedDB |
+| 构建 | tsup + esbuild + 本地 Tailwind CLI |
+| 测试 | Vitest |
 
 ## 版权与致谢
 
-本项目遵循 **MIT License**（见 `LICENSE`）。
+项目遵循 MIT License。
 
-### 借鉴来源（MIT，特此致谢）
-
-- **[bead-pattern](https://github.com/wuZHeBoy/bead-pattern)（MIT）** —— 转像素算法的整体思路与实现被本项目**以 TypeScript 重写**：主体裁剪 `crop_to_subject`、`Image.BOX` 面积平均降采样、完整 `CIEDE2000` 配色、`flood_remove_bg` 去背景、`despeckle`/`limit_colors` 后处理。重写保留其原始 MIT 版权声明。
-- **[pyxelate](https://github.com/sedthh/pyxelate)（MIT）** —— 调研阶段仅作试跑参考，未进入正式管线。
-
-### 运行时依赖（MIT）及其许可
-
-| 依赖 | 许可 | 用途 |
-|---|---|---|
-| sharp | Apache-2.0 | CLI/Node 端图片编解码与 PNG 渲染 |
-| fft.js | MIT | 现有其它频域实验/兼容路径；L0 主求解器使用纯 TypeScript Neumann-PCG |
-| esbuild | MIT | CLI 打包 |
-| tsup | MIT | 库打包 |
-| vitest | MIT | 测试 |
-| TypeScript | Apache-2.0 | 语言 |
-
-web 端依赖 react/react-dom/konva/react-konva/vite（均 MIT），见 `E:\M_Workbench\MirrorPin\web\package.json`。
-
-### 色卡数据声明
-
-`MARD 291` 色号与 RGB 值为**事实型数据**，转录自公开色卡资料（pixel-beads / bitbead 等），非本项目的原创代码。商品实色以实物色卡为准，图纸中标注为近似色。`MARD221` 为其子集（A–H/M 系列）。
-
-## License
-
-[MIT](./LICENSE)
+- [bead-pattern](https://github.com/wuZHeBoy/bead-pattern)（MIT）：主体裁剪、面积采样、CIEDE2000 配色与后处理思路，MirrorPin 以 TypeScript 重写并继续演进。
+- [pyxelate](https://github.com/sedthh/pyxelate)（MIT）：仅用于早期调研，没有进入产品主管线。
+- `MARD 291/221` 色号与屏幕 RGB 为公开事实型色卡数据；实物颜色以品牌色卡为准。

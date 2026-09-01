@@ -1,0 +1,364 @@
+@import "tailwindcss" source("../pages");
+
+@theme inline {
+  --color-background: var(--mirrorpin-background);
+  --color-foreground: var(--mirrorpin-foreground);
+  --color-card: var(--mirrorpin-card);
+  --color-card-foreground: var(--mirrorpin-card-foreground);
+  --color-popover: var(--mirrorpin-popover);
+  --color-popover-foreground: var(--mirrorpin-popover-foreground);
+  --color-primary: var(--mirrorpin-primary);
+  --color-primary-foreground: var(--mirrorpin-primary-foreground);
+  --color-muted: var(--mirrorpin-muted);
+  --color-muted-foreground: var(--mirrorpin-muted-foreground);
+  --color-border: var(--mirrorpin-border);
+  --color-input: var(--mirrorpin-input);
+  --color-ring: var(--mirrorpin-ring);
+  --radius-sm: var(--mirrorpin-radius-sm);
+  --radius-md: var(--mirrorpin-radius-md);
+  --radius-lg: var(--mirrorpin-radius-lg);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--mirrorpin-primary) 11%, transparent), transparent 34rem),
+      linear-gradient(180deg, #fffdfb 0%, var(--mirrorpin-background) 24rem);
+    color: var(--mirrorpin-foreground);
+  }
+
+  header {
+    box-shadow: 0 1px 0 rgb(31 31 31 / 0.03), 0 10px 32px rgb(89 55 45 / 0.04);
+  }
+
+  footer {
+    background: rgb(255 255 255 / 0.72) !important;
+    backdrop-filter: blur(16px);
+  }
+
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
+  select {
+    min-height: 2.75rem;
+    border-color: color-mix(in srgb, var(--mirrorpin-border) 82%, var(--mirrorpin-primary));
+    background: rgb(255 255 255 / 0.92);
+    box-shadow: inset 0 1px 2px rgb(31 31 31 / 0.025), 0 1px 0 rgb(255 255 255 / 0.9);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):hover,
+  select:hover {
+    border-color: color-mix(in srgb, var(--mirrorpin-primary) 48%, var(--mirrorpin-border));
+  }
+
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):focus-visible,
+  select:focus-visible {
+    border-color: var(--mirrorpin-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mirrorpin-primary) 17%, transparent), 0 8px 20px rgb(95 53 43 / 0.06);
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:disabled {
+    box-shadow: none !important;
+  }
+
+  td,
+  th {
+    overflow-wrap: anywhere;
+    word-break: auto-phrase;
+  }
+
+  th {
+    white-space: nowrap;
+  }
+}
+
+@layer components {
+  .mirrorpin-surface {
+    border: 1px solid color-mix(in srgb, var(--mirrorpin-border) 88%, var(--mirrorpin-primary));
+    border-radius: 1.25rem;
+    background: linear-gradient(145deg, rgb(255 255 255 / 0.98), rgb(255 253 251 / 0.92));
+    box-shadow: 0 1px 2px rgb(47 31 27 / 0.04), 0 12px 34px rgb(93 56 46 / 0.07);
+  }
+
+  .mirrorpin-section {
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+  }
+
+  .mirrorpin-subtle-panel {
+    border: 1px solid color-mix(in srgb, var(--mirrorpin-border) 88%, var(--mirrorpin-primary));
+    border-radius: 0.875rem;
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.94), color-mix(in srgb, var(--mirrorpin-primary-50) 42%, white));
+  }
+
+  .mirrorpin-status {
+    border: 1px solid color-mix(in srgb, var(--mirrorpin-primary) 18%, var(--mirrorpin-border));
+    border-radius: 1rem;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--mirrorpin-primary-50) 72%, white), rgb(255 255 255 / 0.96));
+    box-shadow: 0 8px 24px rgb(93 56 46 / 0.05);
+  }
+
+  .mirrorpin-primary-button {
+    border: 1px solid color-mix(in srgb, var(--mirrorpin-primary) 86%, black);
+    background: linear-gradient(135deg, var(--mirrorpin-primary-400), var(--mirrorpin-primary-500));
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--mirrorpin-primary) 24%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.24);
+    transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+  }
+
+  .mirrorpin-primary-button:hover:not(:disabled) {
+    filter: saturate(1.05) brightness(1.02);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px color-mix(in srgb, var(--mirrorpin-primary) 30%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.24);
+  }
+
+  .mirrorpin-primary-button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .mirrorpin-secondary-button {
+    border: 1px solid color-mix(in srgb, var(--mirrorpin-border) 76%, var(--mirrorpin-primary));
+    background: rgb(255 255 255 / 0.9);
+    box-shadow: 0 5px 16px rgb(73 47 40 / 0.06);
+    transition: border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .mirrorpin-secondary-button:hover {
+    border-color: color-mix(in srgb, var(--mirrorpin-primary) 55%, var(--mirrorpin-border));
+    color: var(--mirrorpin-primary-600);
+    transform: translateY(-1px);
+    box-shadow: 0 9px 22px rgb(73 47 40 / 0.09);
+  }
+
+  .preset-card,
+  .complexity-card,
+  .smooth-card,
+  .scale-card {
+    border-color: color-mix(in srgb, var(--mirrorpin-border) 86%, var(--mirrorpin-primary));
+    background: rgb(255 255 255 / 0.86);
+    box-shadow: 0 2px 8px rgb(73 47 40 / 0.025);
+  }
+
+  .preset-card:hover,
+  .complexity-card:hover,
+  .smooth-card:hover,
+  .scale-card:hover {
+    background: color-mix(in srgb, var(--mirrorpin-primary-50) 60%, white);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgb(93 56 46 / 0.08);
+  }
+
+  .preset-card:has(input:checked),
+  .complexity-card:has(input:checked),
+  .smooth-card:has(input:checked),
+  .scale-card:has(input:checked) {
+    border-color: var(--mirrorpin-primary);
+    background: linear-gradient(145deg, var(--mirrorpin-primary-50), #fffaf8);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--mirrorpin-primary) 22%, transparent), 0 10px 22px color-mix(in srgb, var(--mirrorpin-primary) 11%, transparent);
+  }
+
+  .preset-card:has(input:checked) svg {
+    color: var(--mirrorpin-primary);
+  }
+
+  .toggle-switch {
+    box-shadow: inset 0 1px 3px rgb(31 31 31 / 0.15), 0 0 0 1px rgb(31 31 31 / 0.035);
+  }
+
+  .toggle-switch span {
+    pointer-events: none;
+    box-shadow: 0 1px 4px rgb(31 31 31 / 0.2);
+  }
+
+  #upload-zone {
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.96), color-mix(in srgb, var(--mirrorpin-primary-50) 45%, white));
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7);
+    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  #upload-zone:hover {
+    transform: translateY(-1px);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7), 0 12px 28px color-mix(in srgb, var(--mirrorpin-primary) 9%, transparent);
+  }
+
+  #advanced-toggle,
+  #advanced-body,
+  [role="switch"] {
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+
+  .mirrorpin-progress-card {
+    width: min(100%, 36rem);
+    padding: clamp(1.25rem, 4vw, 1.75rem);
+  }
+
+  .mirrorpin-progress-head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.875rem;
+    text-align: left;
+  }
+
+  .mirrorpin-progress-label {
+    color: var(--mirrorpin-primary-700);
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
+  .mirrorpin-progress-percent {
+    color: var(--mirrorpin-foreground);
+    font-family: var(--mirrorpin-font-mono);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+
+  .mirrorpin-progress-track {
+    position: relative;
+    height: 0.875rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--mirrorpin-primary) 14%, var(--mirrorpin-border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--mirrorpin-primary-100) 60%, var(--mirrorpin-muted));
+    box-shadow: inset 0 2px 4px rgb(81 50 43 / 0.08), 0 1px 0 rgb(255 255 255 / 0.9);
+  }
+
+  .mirrorpin-progress-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--progress, 0%);
+    min-width: 0.3rem;
+    overflow: hidden;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--mirrorpin-primary-300), var(--mirrorpin-primary), var(--mirrorpin-primary-500));
+    box-shadow: 0 0 18px color-mix(in srgb, var(--mirrorpin-primary) 28%, transparent);
+    transition: width 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .mirrorpin-progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 45%;
+    background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.52), transparent);
+    animation: mirrorpin-progress-shimmer 1.7s ease-in-out infinite;
+  }
+
+  .mirrorpin-progress-nodes {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-top: 1rem;
+  }
+
+  .mirrorpin-progress-node {
+    display: grid;
+    justify-items: center;
+    gap: 0.45rem;
+    color: color-mix(in srgb, var(--mirrorpin-muted-foreground) 76%, white);
+    font-size: 0.68rem;
+    line-height: 1.2;
+    text-align: center;
+    transition: color 180ms ease;
+  }
+
+  .mirrorpin-progress-node::before {
+    content: "";
+    width: 0.62rem;
+    height: 0.62rem;
+    border: 2px solid color-mix(in srgb, var(--mirrorpin-border) 80%, var(--mirrorpin-muted-foreground));
+    border-radius: 999px;
+    background: white;
+    box-shadow: 0 0 0 4px white;
+    transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .mirrorpin-progress-node[data-state="complete"] {
+    color: var(--mirrorpin-primary-600);
+  }
+
+  .mirrorpin-progress-node[data-state="complete"]::before {
+    border-color: var(--mirrorpin-primary);
+    background: var(--mirrorpin-primary);
+  }
+
+  .mirrorpin-progress-node[data-state="current"] {
+    color: var(--mirrorpin-foreground);
+    font-weight: 650;
+  }
+
+  .mirrorpin-progress-node[data-state="current"]::before {
+    border-color: var(--mirrorpin-primary);
+    background: white;
+    box-shadow: 0 0 0 4px white, 0 0 0 6px color-mix(in srgb, var(--mirrorpin-primary) 20%, transparent);
+    transform: scale(1.08);
+  }
+
+  .bead-grid {
+    border-color: color-mix(in srgb, var(--mirrorpin-primary) 15%, var(--mirrorpin-border));
+    background: linear-gradient(145deg, white, var(--mirrorpin-primary-50));
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--mirrorpin-primary) 10%, transparent);
+  }
+
+  #pattern-preview canvas,
+  #pattern-preview svg {
+    border-radius: 0.625rem;
+    box-shadow: 0 10px 25px rgb(54 37 32 / 0.1);
+  }
+
+  #material-list tbody tr {
+    transition: background-color 140ms ease;
+  }
+
+  #material-list tbody tr:hover {
+    background: color-mix(in srgb, var(--mirrorpin-primary-50) 58%, white);
+  }
+
+  @keyframes mirrorpin-progress-shimmer {
+    from { transform: translateX(-130%); }
+    to { transform: translateX(300%); }
+  }
+}
+
+@media (max-width: 640px) {
+  .mirrorpin-section {
+    border-radius: 1rem;
+    padding: 1.1rem;
+  }
+
+  .mirrorpin-progress-node span {
+    display: none;
+  }
+
+  .mirrorpin-progress-nodes {
+    gap: 0.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .mirrorpin-progress-fill::after {
+    display: none;
+  }
+}

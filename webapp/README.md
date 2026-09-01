@@ -1,32 +1,48 @@
-# MirrorPin webapp（纯前端本地版）
+# MirrorPin Webapp 0.3.0
 
-基于 UI/UX 设计稿（`pages/*.html`，原始设计在 `C:\Users\25230\Documents\6a903fc1493b39ac3ad12b8d\mirrorpin-design`）适配算法库的单页流程：
+这是自包含、纯前端的拼豆图纸生成器：
 
-```
-上传图片 → 选板规/色卡/复杂度/抠白底 →（高级设置折叠可选）→ 生成图纸 → 预览 + 材料清单 → 下载 PNG/CSV
+```text
+上传 → 参数 → Web Worker 生成 → diagnostics → PNG/CSV
 ```
 
 ## 运行
 
 ```bash
-# 1. 构建浏览器算法包（esbuild 打包 src + fft.js → webapp/app/algo.mjs）
+cd E:\M_Workbench\MirrorPin
 npm run build:webapp
-
-# 2. 本地静态服务（零依赖，默认 5173）
 npm run serve:webapp
-# 或一条命令：npm run webapp
 ```
 
-打开 http://localhost:5173/ 。
+打开 [http://localhost:5173/](http://localhost:5173/)。
 
 ## 架构
 
-- `pages/*.html`：设计稿四页（index/generating/result/error），仅注入 `<script type="module" src="../app/main.mjs">`，未改设计稿结构与样式。
-- `app/main.mjs`：页面逻辑 —— 参数收集（板规/色卡/复杂度→minBeads/抠白底/高级折叠）、IndexedDB 中转（图片、参数、Grid、meta），生成在 generating 页执行后跳 result。
-- `app/algo.mjs`：浏览器算法包（构建产物，不入库）—— `generateForBoard`（`E:\M_Workbench\MirrorPin\src\board.ts`，fixed 板规铺满 + L0 + DPID）+ `renderPatternImage` + `countGridMaterials`。
-- 隐私：全程浏览器本地计算，IndexedDB 中转，无任何网络请求出站。
+- `E:\M_Workbench\MirrorPin\webapp\pages\*.html`：上传、生成中、结果、错误四页。
+- `E:\M_Workbench\MirrorPin\webapp\app\main.mjs`：页面控制、IndexedDB 恢复、下载与 requestId/stale-result 防护。
+- `E:\M_Workbench\MirrorPin\webapp\app\params.mjs`：可测试的参数解析、旧记录迁移与完整表单恢复；当前参数 schema 保留用户明确改动。
+- `E:\M_Workbench\MirrorPin\webapp\entry.worker.ts`：Worker 源码，调用共享 `runWorkerGeneration()`。
+- `E:\M_Workbench\MirrorPin\webapp\app\algo.worker.mjs`：构建生成的 Worker bundle。
+- `E:\M_Workbench\MirrorPin\webapp\app\algo.mjs`：主线程只保留板规、profile、渲染与材料统计。
+- `E:\M_Workbench\MirrorPin\webapp\app\styles.css`：本地 Tailwind 构建产物，无 CDN。
+- `E:\M_Workbench\MirrorPin\webapp\app\icons.mjs`：本地图标，无外部脚本。
 
-## 说明
+Worker 进度阶段：`prepare / resample / candidates / optimize / cleanup / done`。完成消息包含 `requestId`、`diagnostics`、耗时和 `algorithmVersion`。
 
-- 真实上传需在浏览器里选择本地文件（IAB 自动化不支持 file chooser，验证用 `pages/_qa.html` 临时页执行完整链路后已删除）。
-- 生成在主线程同步执行，78×78 板规 1024² 图约 9 秒；取消按钮回 index（结果丢弃）。
+## 本地数据与隐私
+
+图片、参数、Grid 和 diagnostics 只保存在当前浏览器 IndexedDB。图片和图纸不上传，不写入服务器，不依赖远程 API、CDN 或第三方字体。
+
+## 部署包
+
+```bash
+npm run build:webapp-deploy
+```
+
+产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip`
+
+ZIP 根目录含 `index.html`、`DEPLOYMENT.md` 与 `deployment.json`。静态服务器只需：
+
+1. 保持 ZIP 内目录结构；
+2. 将 `.mjs` 返回为 `text/javascript` 或 `application/javascript`；
+3. 不需要 SPA rewrite。

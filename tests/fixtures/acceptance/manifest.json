@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "algorithmVersion": "0.3.0",
+  "fixtures": [
+    { "id": "photo-noise", "kind": "synthetic", "semanticTruth": true },
+    { "id": "flat-illustration", "kind": "synthetic", "semanticTruth": true },
+    { "id": "text-lines", "kind": "synthetic", "semanticTruth": true },
+    { "id": "alpha-edge", "kind": "synthetic", "semanticTruth": true },
+    { "id": "q13", "kind": "local-real-image", "path": "E:\\Downloads\\Q13_peek_探头.png", "semanticTruth": false, "committed": false }
+  ],
+  "boards": ["52x52", "78x78", "104x104", "78x52"],
+  "determinismRuns": 3
+}

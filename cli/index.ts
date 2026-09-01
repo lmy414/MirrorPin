@@ -7,12 +7,12 @@ import type { RgbaImage, Swatch, Grid } from '../src/core/types';
 import {
   MARD291,
   MARD221,
+  ALGORITHM_VERSION,
   generatePatternBead,
-  quantizeImage,
 } from '../src/index';
 import { renderPatternPng, countGridMaterials } from '../src/render/node';
 
-const VERSION = '0.2.0';
+const VERSION = ALGORITHM_VERSION;
 
 const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
 
@@ -27,8 +27,8 @@ const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
 选项:
   --max-side <n>          网格最大边长（另一边按比例），默认 64
   --blur <sigma>          兼容旧别名；显式时启用高斯平滑并覆盖 --smooth（无默认 sigma）
-  --no-blur               兼容旧别名；显式时关闭平滑（未指定时实际默认 smooth=l0）
-  --colors <n>            预处理降色数（0=不降色），默认 64
+  --no-blur               兼容旧别名；显式时关闭平滑
+  --colors <n>            预处理降色数（0=不降色），默认 0
   --no-crop               关闭透明通道裁剪
   --max-colors <n>        最终色号上限（不限制则省略）
   --min-beads <n>         稀有色合并：用量 < n 的色号并入邻近色（0=不合并）
@@ -36,9 +36,13 @@ const HELP = `MirrorPin ${VERSION} — 拼豆图纸生成工具
   --despeckle             清理 <2 格的杂点
   --dither                抖动（照片渐变用，会导致色号增多）
   --board <n>             板界线间隔，默认 29
-  --smooth <kind>         保边平滑（默认 l0）：none/gauss/guided/l0/l0soft
-  --smooth-sigma <n>      gauss/L0 参数（gauss=sσ，l0/l0soft=λ，默认 1/0.02/0.005）
-  --scale <kind>          降采样算法（默认 dpid）：box/dpid
+  --smooth <kind>         保边平滑（默认 guided）：none/gauss/guided/l0/l0soft
+  --smooth-sigma <n>      gauss/L0/Guided 参数（默认 1/0.02/100）
+  --scale <kind>          降采样算法（默认 area）：area/box/dpid
+  --spatial-strength <n>  空间平滑强度，默认 0.35
+  --spatial-top-k <n>     每格候选色数量，默认 8
+  --cleanup-size <n>      小区域清理上限，默认 2
+  --no-spatial            关闭空间优化，使用兼容逐格匹配
   --palette <name>        色卡：mard291（含扩展 70 色，默认）| mard221（标准 A-H/M 221 色）
   --no-legend             关闭图纸内嵌材料清单面板（默认开启）
   -h, --help              显示帮助
@@ -84,14 +88,6 @@ export async function decode(imagePath: string): Promise<RgbaImage> {
   return { width: info.width, height: info.height, data: new Uint8ClampedArray(data) };
 }
 
-/** 预处理：高斯模糊(可选) + kmeans 降色(可选)。kColors>=256 或 <=0 表示不降色 */
-export function preprocess(
-  img: RgbaImage,
-  opts: { kColors: number },
-): RgbaImage {
-  return quantizeImage(img, opts.kColors);
-}
-
 export type PaletteName = 'mard291' | 'mard221';
 
 export interface ConvertArgs {
@@ -101,7 +97,7 @@ export interface ConvertArgs {
   maxSide: number;
   /** false=关；数字=sigma @default 1 */
   blur: number | false | undefined;
-  /** @default 64 — 0=不降色 */
+  /** @default 0 — 0=不降色 */
   colors: number;
   crop: boolean;
   maxColors?: number;
@@ -116,7 +112,11 @@ export interface ConvertArgs {
   legend: boolean;
   smooth: 'none' | 'gauss' | 'guided' | 'l0' | 'l0soft';
   smoothSigma?: number;
-  scale: 'box' | 'dpid';
+  scale: 'area' | 'box' | 'dpid';
+  spatial: boolean;
+  spatialStrength: number;
+  spatialTopK: number;
+  cleanupSize: number;
   /** 色卡：mard291（默认，含扩展）| mard221（标准 A-H/M） */
   palette: PaletteName;
   materials?: string; // 材料清单输出路径（optional，csv）
@@ -128,14 +128,18 @@ export function parseArgs(argv: string[]): ConvertArgs {
     output: '',
     maxSide: 64,
     blur: undefined as unknown as number | false,
-    colors: 64,
+    colors: 0,
     crop: true,
     removeBg: 'none',
     despeckle: false,
     dither: false,
     board: 29,
-    smooth: 'l0',
-    scale: 'dpid',
+    smooth: 'guided',
+    scale: 'area',
+    spatial: true,
+    spatialStrength: 0.35,
+    spatialTopK: 8,
+    cleanupSize: 2,
     legend: true,
     palette: 'mard291',
     minBeads: 0,
@@ -207,10 +211,26 @@ export function parseArgs(argv: string[]): ConvertArgs {
       }
       case '--scale': {
         const v = (next() ?? '').toLowerCase();
-        if (v !== 'box' && v !== 'dpid') throw new Error(`--scale 非法取值: ${v}（可选 box/dpid）`);
+        if (v !== 'area' && v !== 'box' && v !== 'dpid') throw new Error(`--scale 非法取值: ${v}（可选 area/box/dpid）`);
         a.scale = v as typeof a.scale;
         break;
       }
+      case '--spatial-strength': {
+        const raw = next();
+        const v = Number(raw);
+        if (!Number.isFinite(v) || v < 0) throw new Error(`--spatial-strength 非法取值: ${raw}（需为有限非负数）`);
+        a.spatialStrength = v;
+        break;
+      }
+      case '--spatial-top-k':
+        a.spatialTopK = parsePositiveInt(next(), '--spatial-top-k');
+        break;
+      case '--cleanup-size':
+        a.cleanupSize = parseNonNegativeInt(next(), '--cleanup-size');
+        break;
+      case '--no-spatial':
+        a.spatial = false;
+        break;
       case '--palette': {
         const v = (next() ?? '').toLowerCase();
         if (v !== 'mard291' && v !== 'mard221') throw new Error(`未知色卡: ${v}（可选 mard291 / mard221）`);
@@ -271,6 +291,12 @@ export async function convert(img: RgbaImage, args: ConvertArgs, render: (g: Gri
       return { smooth: 'none' as const };
     })() ),
     scale: args.scale,
+    spatial: {
+      enabled: args.spatial,
+      smoothness: args.spatialStrength,
+      topK: args.spatialTopK,
+      cleanupMaxSize: args.cleanupSize,
+    },
   });
   if (args.output) {
     const buf = await render(grid);

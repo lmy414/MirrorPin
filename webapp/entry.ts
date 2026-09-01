@@ -4,6 +4,8 @@
 export { generateForBoard, BOARD_PRESETS } from '../src/board';
 export { renderPatternImage } from '../src/render/pattern';
 export { countGridMaterials } from '../src/core/materials';
+export { ALGORITHM_VERSION } from '../src/version';
+export { QUALITY_PROFILES, resolveQualityProfile } from '../src/product-profiles';
 
 export type {
   TopLevelOptions,

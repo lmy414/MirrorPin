@@ -2,33 +2,44 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/)，版本遵循 [SemVer](https://semver.org/)。
 
+## [0.3.0] - 2026-09-01
+
+### Added
+
+- 线性光、Alpha-aware 精确面积采样与统一 `GridSamples`（coverage、variance、edgeX、edgeY）。
+- 每格 top-K MARD CIEDE2000 候选和确定性边缘敏感 Potts/ICM 空间优化。
+- 置信度/边缘感知连通分量清理，以及能量感知 `maxColors`、空间分量级 `minBeads`。
+- 统一 operation budget、阶段 timing、能量拆分与 before/after fragmentation diagnostics。
+- `standard / less / minimal` 三种可序列化质量 profile。
+- Webapp 与 minitool 共享 Worker 协议、requestId、真实阶段进度、取消和 algorithm version。
+- IndexedDB schema v2 保存图片、参数、Grid、diagnostics 和版本。
+- 可重复验收矩阵：mean/P95 CIEDE2000、碎片、flat transition、edge F1、thin-line recall、颜色数、耗时、内存和三次确定性 SHA-256。
+- 完全自包含 Webapp 部署 ZIP，含根 `index.html`，不再依赖 Tailwind/Lucide CDN。
+
+### Changed
+
+- 产品默认切换为 `guided + area + spatial on + top-K 8`；默认预降色和抖动关闭。
+- Alpha 标签域统一为 `coverage >= 0.5` / `alpha >= 128`，连续 coverage 继续用于物理颜色积分。
+- 主体 mask 在裁剪和平滑之前建立；透明隐藏 RGB 不再污染边缘。
+- fixed/fill 的 DPID 与 area 直接输出目标板规，不再绕过或二次 BOX。
+- CLI、Webapp、minitool 和公共 board API 统一走 `generatePatternBead()` 主管线。
+- 版本统一由 `ALGORITHM_VERSION = 0.3.0` 提供。
+
+### Compatibility
+
+- `generatePatternBead()` 旧字段继续接受。
+- `box` 作为面积采样兼容名保留。
+- `src/core/pipeline.ts`、`despeckle`、`limitColorsIdx`、`mergeRareIdx` 保留 legacy 导出，但不再是产品默认路径。
+
 ## [0.2.0] - 2026-08-27
 
 ### Added
-- 保边平滑：`l0Smooth` (L0 梯度最小化，λ=0.02/弱档 0.005) / `guidedSmooth` (引导滤波，r=8/eps=100) / `gaussianBlur`，统一接入 `generatePatternBead({ smooth, smoothLambda/smoothSigma/smoothEps })`
-- 保细节降采样：`dpidDownscale` (λ=1.0，0 退化为 box)，统一接入 `generatePatternBead({ scale, dpidLambda })`
-- CLI：`--smooth` / `--smooth-sigma` / `--scale`（默认 `l0+dpid`，`--blur`/`--no-blur` 兼容旧参），`--help` 同步
 
-### Changed
-- 默认管线由 `gauss+box` 切换为 `l0+dpid`（四类素材实验验证：赛璐璐上色/线稿梗图/文字信息图/低饱和粉彩均第一梯队）
-- 版本 `0.1.0 → 0.2.0`，新增依赖 `fft.js` (MIT)
-
-### Notes
-- L0 在 1024² 上约数秒（FFT，2048² 需 padding）；后续可提供“降至 512 再做 L0”快速路径
-- 实验目录 `experiments/` 与 `output/exp-*` 已入 `.gitignore`，跨图对比 `exp-step1-smooth-dpid/<exp>/sheet.png`
+- L0、Guided、高斯保边平滑与 DPID 降采样。
+- CLI `--smooth`、`--smooth-sigma`、`--scale`。
 
 ## [0.1.0] - 2026-08-27
 
 ### Added
-- 转像素主管线 `generatePatternBead`（BOX 面积平均 + CIEDE2000 + 主体裁剪 + despeckle/限色）
-- MARD 291/221 色卡（`MARD291` 291 色，`MARD221` 221 色标准 A–H/M 子集）
-- 稀有色合并 `mergeRareIdx` / `--min-beads`
-- 正式图纸渲染（SVG+sharp 与位图字体双渲染器）及图例/标题栏（`--palette`/`--no-legend`）
-- CLI：`--max-side/--blur/--colors/--max-colors/--min-beads/--remove-bg/--despeckle/--dither/--board/--palette/--no-legend/--help/--version`，CSV `code,hex,count`
-- 测试 68 项，构建（tsup + esbuild）与类型声明
 
-### Changed
-- README 与 CLI 选项表对齐，示例改用 `E:\` 绝对路径
-
-## [Unreleased]
-- 预留：preprocess 共享化、countGridMaterials 统一、limitColorsIdx/mergeRareIdx 合并为通用 mergeByCount、CI/lint/format
+- `generatePatternBead()`、MARD 291/221、正式 PNG/CSV、材料清单、基础 CLI 与后处理。

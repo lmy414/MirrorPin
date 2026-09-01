@@ -1,6 +1,6 @@
 // 转像素核心：source ForegroundMask → mask-aware crop/extension/smooth →
-// 一次 area/DPID resample → match/postprocess。默认分层：库 none+box，
-// board guided+dpid，CLI l0+dpid；smooth 只影响 RGB，alpha/final mask 不变。
+// 一次 area/DPID resample → top-K CIEDE2000 → spatial optimize/cleanup。
+// clean 默认统一为 guided+area+spatial；smooth 只影响 RGB，alpha/final mask 不变。
 // 组件与生成器一一对应：crop_to_subject / crop_to_aspect / to_grid(Image.BOX)
 //   / flood_remove_bg / match_direct / match_dither / despeckle / limit_colors。
 
@@ -23,6 +23,7 @@ import {
   dpidResampleToGrid,
   fitResampleToGrid,
   gridSamplesToRgba,
+  type GridSamples,
 } from '../core/resample';
 import { quantizeImage } from '../core/color-quantize';
 import { normalizeSwatches } from '../core/palette';
@@ -469,6 +470,13 @@ export interface ResampleEvent {
 }
 
 export type ResampleHook = (event: ResampleEvent) => void;
+export interface GenerationDetails {
+  samples: GridSamples;
+  initialLabels: Int32Array;
+  finalLabels: Int32Array;
+  palette: readonly Swatch[];
+}
+export type DetailedResultHook = (details: GenerationDetails) => void;
 export type GenerationStage = 'prepare' | 'resample' | 'candidates' | 'optimize' | 'cleanup' | 'done';
 export interface ProgressEvent { stage: GenerationStage; progress: number }
 export type ProgressHook = (event: ProgressEvent) => void;
@@ -520,6 +528,8 @@ export interface BeadOptions {
   shouldCancel?: () => boolean;
   /** @internal library-only hook; functions are not intended for worker serialization. */
   onResample?: ResampleHook;
+  /** @internal acceptance hook exposing target samples and label states. */
+  onDetailedResult?: DetailedResultHook;
 }
 
 const DEFAULTS_BEAD = {
@@ -690,6 +700,12 @@ export function generatePatternBead(img: RgbaImage, options: BeadOptions): Grid 
   const colorSet = new Set<string>();
   for (const row of cells) for (const cell of row) if (!cell.external) colorSet.add(cell.code);
   emit('done');
+  options.onDetailedResult?.({
+    samples,
+    initialLabels: Int32Array.from(initial),
+    finalLabels: finalIdx.slice(),
+    palette: canonicalSwatches,
+  });
   if (diagnostics) {
     const small = (metrics: typeof beforeMetrics) => metrics.componentCount ? metrics.singletonComponentCount / metrics.componentCount : 0;
     const smallSnapshot = (metrics: typeof beforeMetrics) => metrics;

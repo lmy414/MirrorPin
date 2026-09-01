@@ -23,7 +23,7 @@
         <p>图片不会上传网络。算法、预览和材料统计都在当前设备内完成。</p>
         <p class="quality-note">建议使用白底或带透明通道的图片，生成质量更佳。</p>
         <p class="quality-note">边界清晰、细节较少、颜色较少的图片更适合生成；构图复杂、细节较多或颜色丰富时，质量会下降，可能出现较多杂色。</p>
-        <p class="version-line">算法库版本 v0.2.0</p>
+        <p class="version-line">算法库版本 v0.3.0</p>
       </section>
 
       <section class="panel" aria-labelledby="upload-title">
@@ -135,9 +135,9 @@
             <div class="field-row">
               <label class="field-label" for="smooth-select">平滑</label>
               <select id="smooth-select">
-                <option value="l0" selected>L0 标准</option>
+                <option value="guided" selected>引导滤波（默认）</option>
+                <option value="l0">L0 标准</option>
                 <option value="weak">L0 弱</option>
-                <option value="guided">引导滤波</option>
                 <option value="gaussian">高斯</option>
                 <option value="off">关闭</option>
               </select>
@@ -145,14 +145,14 @@
             <div class="field-row">
               <label class="field-label" for="scale-select">缩放算法</label>
               <select id="scale-select">
-                <option value="dpid" selected>DPID · 保细节</option>
-                <option value="box">BOX · 面积平均</option>
+                <option value="area" selected>精确面积（默认）</option>
+                <option value="dpid">DPID · 保细节</option>
               </select>
             </div>
             <div class="input-grid">
               <label>
                 <span>预处理降色</span>
-                <input id="preprocess-colors" type="number" min="0" max="255" step="1" value="64" inputmode="numeric" />
+                <input id="preprocess-colors" type="number" min="0" max="255" step="1" value="0" inputmode="numeric" />
               </label>
               <label>
                 <span>稀有色合并</span>
@@ -237,7 +237,7 @@
       </section>
     </main>
 
-    <footer class="footer">MirrorPin · 算法库 v0.2.0 · 图片与结果只留在当前设备</footer>
+    <footer class="footer">MirrorPin · 算法库 v0.3.0 · 图片与结果只留在当前设备</footer>
   </div>
 
   <script src="./assets/algo.js"></script>

@@ -31,6 +31,17 @@ await build({
   logLevel: 'info',
 });
 
+await build({
+  entryPoints: [path.join(root, 'minitool', 'entry.worker.ts')],
+  bundle: true,
+  format: 'iife',
+  platform: 'browser',
+  target: 'es2020',
+  sourcemap: false,
+  outfile: path.join(assets, 'algo.worker.js'),
+  logLevel: 'info',
+});
+
 const psQuote = (value) => "'" + value.replaceAll("'", "''") + "'";
 execFileSync('powershell.exe', [
   '-NoProfile', '-NonInteractive', '-Command',

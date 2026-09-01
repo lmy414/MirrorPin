@@ -1,15 +1,15 @@
 (function () {
   'use strict';
 
-  const ALGORITHM_VERSION = '0.2.0';
   const api = window.MirrorPinAlgo;
+  const ALGORITHM_VERSION = api && api.ALGORITHM_VERSION ? api.ALGORITHM_VERSION : '0.3.0';
   if (!api) {
     document.body.textContent = '算法资源加载失败，请重新打开小工具。';
     return;
   }
 
-  const { generateForBoard, countGridMaterials } = api;
-  const state = { file: null, previewUrl: null, grid: null, meta: null, image: null };
+  const { countGridMaterials, resolveQualityProfile } = api;
+  const state = { file: null, previewUrl: null, grid: null, meta: null, image: null, worker: null, requestId: '' };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -65,22 +65,26 @@
 
   function collectParams() {
     const complexity = selectedValue('complexity', 'standard');
-    const complexityMinBeads = { standard: 0, less: 5, minimal: 10 }[complexity] || 0;
+    const profile = resolveQualityProfile(complexity);
+    const explicitMinBeads = nonNegativeIntegerValue('min-beads', undefined);
     return {
       board: selectedValue('board', '78x78'),
       palette: $('#palette-select').value,
-      minBeads: nonNegativeIntegerValue('min-beads', complexityMinBeads),
+      minBeads: explicitMinBeads === undefined ? profile.minBeads : explicitMinBeads,
       removeBg: switchValue('remove-bg-toggle'),
+      quality: complexity,
       advanced: {
-        ...(SMOOTH_MAP[$('#smooth-select').value] || SMOOTH_MAP.l0),
-        scale: $('#scale-select').value,
-        colors: nonNegativeIntegerValue('preprocess-colors', 64),
-        maxColors: numberValue('max-colors', undefined),
+        ...(profile.advanced || {}),
+        ...(SMOOTH_MAP[$('#smooth-select').value] || SMOOTH_MAP.guided),
+        scale: $('#scale-select').value === 'box' ? 'area' : $('#scale-select').value,
+        colors: nonNegativeIntegerValue('preprocess-colors', 0),
+        maxColors: numberValue('max-colors', profile.advanced && profile.advanced.maxColors),
         dither: switchValue('dither-toggle'),
         despeckle: switchValue('despeckle-toggle'),
         renderCell: numberValue('render-cell', 40),
         renderBoard: nonNegativeValue('render-board', 29),
         backgroundTolerance: nonNegativeValue('bg-tolerance', 12),
+        spatial: { ...((profile.advanced && profile.advanced.spatial) || {}), enabled: true },
       },
     };
   }
@@ -407,20 +411,39 @@
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const image = await decodeImage(state.file);
       const params = collectParams();
-      const start = performance.now();
-      const result = generateForBoard(image, params);
-      state.image = image;
+      const requestId = 'minitool-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+      state.requestId = requestId;
+      state.worker = new Worker('./assets/algo.worker.js');
+      const result = await new Promise((resolve, reject) => {
+        state.worker.onmessage = (event) => {
+          const message = event.data;
+          if (message.requestId !== state.requestId) return;
+          if (message.type === 'progress') {
+            setStatus('generate-status', '正在本地生成：' + message.stage + ' · ' + message.progress + '%');
+          } else if (message.type === 'done') resolve(message);
+          else if (message.type === 'error') reject(new Error(message.message));
+          else if (message.type === 'cancelled') reject(new Error('生成已取消'));
+        };
+        state.worker.onerror = (event) => reject(new Error(event.message || 'Worker 运行失败'));
+        state.worker.postMessage({ type: 'generate', requestId: requestId, img: image, params: params }, [image.data.buffer]);
+      });
+      state.worker.terminate();
+      state.worker = null;
+      state.image = null;
       state.grid = result.grid;
       state.meta = {
         palette: params.palette,
         renderCell: params.advanced.renderCell,
         renderBoard: params.advanced.renderBoard,
-        elapsedMs: Math.round(performance.now() - start),
+        elapsedMs: result.elapsedMs,
+        diagnostics: result.diagnostics,
+        algorithmVersion: result.algorithmVersion,
       };
       renderResult();
       setStatus('generate-status', '生成完成，可查看图纸和材料清单。', 'success');
       $('#result-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (error) {
+      if (state.worker) { state.worker.terminate(); state.worker = null; }
       setStatus('generate-status', '生成失败：' + (error && error.message ? error.message : '请更换图片后重试。'), 'error');
     } finally {
       button.disabled = !state.file;

@@ -1,6 +1,12 @@
 // 构建 webapp 浏览器 bundle：webapp/entry.ts → webapp/app/algo.mjs
 // 纯浏览器目标：fft.js 打进包，sharp/Node API 不参与。产物不入库（.gitignore）。
 import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const tailwindCli = fileURLToPath(new URL('../node_modules/@tailwindcss/cli/dist/index.mjs', import.meta.url));
+execFileSync(process.execPath, [tailwindCli, '-i', 'webapp/app/tailwind.input.css', '-o', 'webapp/app/styles.css', '--minify'], { stdio: 'inherit' });
+console.log('webapp/app/styles.css 构建完成');
 
 // 主线程算法包
 await build({

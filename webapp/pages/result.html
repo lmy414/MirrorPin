@@ -101,33 +101,7 @@ html {
 }
 
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
-    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <style type="text/tailwindcss">
-  @theme inline {
-    --color-background: var(--mirrorpin-background);
-    --color-foreground: var(--mirrorpin-foreground);
-    --color-card: var(--mirrorpin-card);
-    --color-card-foreground: var(--mirrorpin-card-foreground);
-    --color-popover: var(--mirrorpin-popover);
-    --color-popover-foreground: var(--mirrorpin-popover-foreground);
-    --color-primary: var(--mirrorpin-primary);
-    --color-primary-foreground: var(--mirrorpin-primary-foreground);
-    --color-muted: var(--mirrorpin-muted);
-    --color-muted-foreground: var(--mirrorpin-muted-foreground);
-    --color-border: var(--mirrorpin-border);
-    --color-input: var(--mirrorpin-input);
-    --color-ring: var(--mirrorpin-ring);
-    --radius-sm: var(--mirrorpin-radius-sm);
-    --radius-md: var(--mirrorpin-radius-md);
-    --radius-lg: var(--mirrorpin-radius-lg);
-  }
-  @layer base {
-    body { background: var(--mirrorpin-background); color: var(--mirrorpin-foreground); }
-    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
-    th { @apply whitespace-nowrap; }
-  }
-    </style>
+    <link rel="stylesheet" href="../app/styles.css">
     <style id="semantic-token-fallback">
       .bg-background { background-color: var(--mirrorpin-background); }
       .text-background { color: var(--mirrorpin-background); }
@@ -208,9 +182,7 @@ html {
         <i data-lucide="grid-3x3" class="h-5 w-5 text-primary"></i>
         MirrorPin
       </a>
-      <a href="https://github.com/MirrorPin" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors">
-        <i data-lucide="github" class="h-5 w-5"></i>
-      </a>
+      <span class="text-xs font-medium text-muted-foreground">浏览器本地版</span>
     </div>
   </header>
 
@@ -218,7 +190,7 @@ html {
     <div class="mx-auto max-w-6xl px-6 py-10 space-y-8">
 
       <section data-region="info-bar">
-        <div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <div class="mirrorpin-status p-5">
           <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             <i data-lucide="info" class="h-4 w-4 text-primary"></i>
             <span class="mirrorpin-mono font-medium text-foreground">78 × 78</span>
@@ -240,12 +212,12 @@ html {
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
         <section data-region="pattern-preview" id="pattern-preview" class="space-y-3">
-          <div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div class="mirrorpin-surface mirrorpin-section">
             <div class="mb-4 flex items-center justify-between gap-4">
               <h2 class="mirrorpin-heading text-lg text-foreground">图纸预览</h2>
               <span class="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">cell 40 · board 29</span>
             </div>
-            <div class="overflow-auto rounded-lg border border-border bg-muted/50 p-4">
+            <div class="mirrorpin-subtle-panel overflow-auto p-4">
               <div class="flex min-w-[320px] justify-center">
                 <svg viewBox="0 0 16 16" class="h-80 w-80" style="shape-rendering:crispEdges" aria-label="拼豆图纸预览">
                   <rect x="0" y="0" width="16" height="16" fill="var(--mirrorpin-background)"/>
@@ -269,7 +241,7 @@ html {
         </section>
 
         <section data-region="material-list" id="material-list" class="space-y-3">
-          <div class="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div class="mirrorpin-surface mirrorpin-section">
             <h2 class="mirrorpin-heading text-lg text-foreground mb-4">材料清单</h2>
             <div class="overflow-auto">
               <table class="w-full text-sm">
@@ -346,15 +318,15 @@ html {
       </div>
 
       <section data-region="download-actions" class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-        <button id="download-png" type="button" class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button id="download-png" type="button" class="mirrorpin-primary-button inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl px-6 py-3 text-base font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <i data-lucide="download" class="h-5 w-5"></i>
           下载图纸 PNG
         </button>
-        <button id="download-csv" type="button" class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button id="download-csv" type="button" class="mirrorpin-primary-button inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl px-6 py-3 text-base font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <i data-lucide="file-spreadsheet" class="h-5 w-5"></i>
           下载清单 CSV
         </button>
-        <a id="back-to-edit" data-dom-id="back-to-edit" href="./index.html" class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg border border-border bg-card px-6 py-3 text-base font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:ml-2">
+        <a id="back-to-edit" data-dom-id="back-to-edit" href="./index.html" class="mirrorpin-secondary-button inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl px-6 py-3 text-base font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:ml-2">
           <i data-lucide="arrow-left" class="h-5 w-5"></i>
           返回修改参数
         </a>
@@ -373,26 +345,7 @@ html {
     <i data-lucide="arrow-up" class="h-5 w-5"></i>
   </a>
 
-  <style>
-    .preset-card:has(input:checked),
-    .complexity-card:has(input:checked),
-    .smooth-card:has(input:checked),
-    .scale-card:has(input:checked) {
-      background-color: var(--mirrorpin-primary-50);
-      border-color: var(--mirrorpin-primary);
-      border-width: 2px;
-    }
-    .preset-card:has(input:checked) svg {
-      color: var(--mirrorpin-primary);
-    }
-    .toggle-switch span {
-      pointer-events: none;
-    }
-  </style>
-
-  <script>
-    lucide.createIcons();
-  </script>
+  <script type="module" src="../app/icons.mjs"></script>
   <script type="module" src="../app/main.mjs"></script>
 </body>
 </html>

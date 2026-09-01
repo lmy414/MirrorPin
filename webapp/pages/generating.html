@@ -101,33 +101,7 @@ html {
 }
 
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
-    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <style type="text/tailwindcss">
-  @theme inline {
-    --color-background: var(--mirrorpin-background);
-    --color-foreground: var(--mirrorpin-foreground);
-    --color-card: var(--mirrorpin-card);
-    --color-card-foreground: var(--mirrorpin-card-foreground);
-    --color-popover: var(--mirrorpin-popover);
-    --color-popover-foreground: var(--mirrorpin-popover-foreground);
-    --color-primary: var(--mirrorpin-primary);
-    --color-primary-foreground: var(--mirrorpin-primary-foreground);
-    --color-muted: var(--mirrorpin-muted);
-    --color-muted-foreground: var(--mirrorpin-muted-foreground);
-    --color-border: var(--mirrorpin-border);
-    --color-input: var(--mirrorpin-input);
-    --color-ring: var(--mirrorpin-ring);
-    --radius-sm: var(--mirrorpin-radius-sm);
-    --radius-md: var(--mirrorpin-radius-md);
-    --radius-lg: var(--mirrorpin-radius-lg);
-  }
-  @layer base {
-    body { background: var(--mirrorpin-background); color: var(--mirrorpin-foreground); }
-    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
-    th { @apply whitespace-nowrap; }
-  }
-    </style>
+    <link rel="stylesheet" href="../app/styles.css">
     <style id="semantic-token-fallback">
       .bg-background { background-color: var(--mirrorpin-background); }
       .text-background { color: var(--mirrorpin-background); }
@@ -208,16 +182,14 @@ html {
         <i data-lucide="grid-3x3" class="h-5 w-5 text-primary"></i>
         MirrorPin
       </a>
-      <a href="https://github.com/MirrorPin" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-foreground transition-colors">
-        <i data-lucide="github" class="h-5 w-5"></i>
-      </a>
+      <span class="text-xs font-medium text-muted-foreground">浏览器本地版</span>
     </div>
   </header>
 
   <main class="flex-1 w-full">
     <div class="mx-auto max-w-3xl px-6 py-16">
-      <section data-region="loading" class="flex flex-col items-center text-center space-y-8">
-        <div class="bead-grid grid grid-cols-8 gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm" aria-hidden="true">
+      <section data-region="loading" class="mirrorpin-surface mirrorpin-section flex flex-col items-center text-center space-y-8">
+        <div class="bead-grid grid grid-cols-8 gap-3 rounded-2xl border border-border bg-card p-6" aria-hidden="true">
           <span class="bead-dot" style="--i:0"></span>
           <span class="bead-dot" style="--i:1"></span>
           <span class="bead-dot" style="--i:2"></span>
@@ -277,7 +249,28 @@ html {
           算法正在你的浏览器里跑，预计需要几秒到几十秒。大图片或 104×104 板规会更久一些。
         </p>
 
-        <a href="./index.html" id="cancel-generate" data-dom-id="cancel-generate" class="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <div class="mirrorpin-progress-card mirrorpin-status" aria-labelledby="generation-stage">
+          <div class="mirrorpin-progress-head">
+            <div>
+              <p class="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">当前阶段</p>
+              <p id="generation-stage" class="mirrorpin-progress-label" aria-live="polite">准备图片与前景</p>
+            </div>
+            <output id="generation-percent" class="mirrorpin-progress-percent" aria-live="polite">0%</output>
+          </div>
+          <div id="generation-progress" class="mirrorpin-progress-track" role="progressbar" aria-label="图纸生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-describedby="generation-stage">
+            <div id="generation-progress-fill" class="mirrorpin-progress-fill" style="--progress: 0%"></div>
+          </div>
+          <ol id="generation-progress-nodes" class="mirrorpin-progress-nodes" aria-label="生成阶段">
+            <li class="mirrorpin-progress-node" data-stage="prepare" data-state="current"><span>准备</span></li>
+            <li class="mirrorpin-progress-node" data-stage="resample" data-state="pending"><span>重采样</span></li>
+            <li class="mirrorpin-progress-node" data-stage="candidates" data-state="pending"><span>候选色</span></li>
+            <li class="mirrorpin-progress-node" data-stage="optimize" data-state="pending"><span>优化</span></li>
+            <li class="mirrorpin-progress-node" data-stage="cleanup" data-state="pending"><span>清理</span></li>
+            <li class="mirrorpin-progress-node" data-stage="done" data-state="pending"><span>完成</span></li>
+          </ol>
+        </div>
+
+        <a href="./index.html" id="cancel-generate" data-dom-id="cancel-generate" class="mirrorpin-secondary-button inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           取消生成
         </a>
       </section>
@@ -308,11 +301,12 @@ html {
       0%, 100% { opacity: 0.35; transform: scale(0.85); }
       50% { opacity: 1; transform: scale(1.1); }
     }
+    @media (prefers-reduced-motion: reduce) {
+      .bead-dot { animation: none; opacity: 0.72; }
+    }
   </style>
 
-  <script>
-    lucide.createIcons();
-  </script>
+  <script type="module" src="../app/icons.mjs"></script>
   <script type="module" src="../app/main.mjs"></script>
 </body>
 </html>
