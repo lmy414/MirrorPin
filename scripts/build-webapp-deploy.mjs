@@ -11,6 +11,9 @@ execFileSync(process.execPath, [path.join(root, 'scripts', 'build-webapp.mjs')],
 await rm(staging, { recursive: true, force: true });
 await mkdir(path.join(staging, 'app'), { recursive: true });
 await mkdir(path.join(staging, 'pages'), { recursive: true });
+for (const route of ['generating', 'result', 'error']) {
+  await mkdir(path.join(staging, route), { recursive: true });
+}
 await mkdir(path.dirname(output), { recursive: true });
 
 for (const file of ['index.html', 'DEPLOYMENT.md']) await cp(path.join(root, 'webapp', file), path.join(staging, file));
@@ -19,6 +22,12 @@ for (const file of ['main.mjs', 'params.mjs', 'algo.mjs', 'algo.worker.mjs', 'st
 }
 for (const file of ['index.html', 'generating.html', 'result.html', 'error.html']) {
   await cp(path.join(root, 'webapp', 'pages', file), path.join(staging, 'pages', file));
+}
+for (const route of ['generating', 'result', 'error']) {
+  await cp(
+    path.join(root, 'webapp', route, 'index.html'),
+    path.join(staging, route, 'index.html'),
+  );
 }
 await writeFile(path.join(staging, 'deployment.json'), `${JSON.stringify({ schemaVersion: 1, algorithmVersion: '0.3.0', entry: 'index.html', moduleMime: 'text/javascript' }, null, 2)}\n`);
 

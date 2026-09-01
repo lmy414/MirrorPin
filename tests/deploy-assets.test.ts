@@ -19,6 +19,13 @@ describe('self-contained webapp deployment', () => {
     expect(readFileSync(resolve(root, 'webapp', 'index.html'), 'utf8')).toContain('pages/index.html');
   });
 
+  it('provides root-level extensionless aliases for every public page', () => {
+    for (const route of ['generating', 'result', 'error']) {
+      const html = readFileSync(resolve(root, 'webapp', route, 'index.html'), 'utf8');
+      expect(html).toContain(`../pages/${route}.html`);
+    }
+  });
+
   it('exposes acceptance and deployment build commands', () => {
     expect(packageJson.scripts.acceptance).toContain('acceptance-bench.mjs');
     expect(packageJson.scripts['build:webapp-deploy']).toContain('build-webapp-deploy.mjs');
