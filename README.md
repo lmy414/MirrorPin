@@ -39,7 +39,8 @@ MirrorPin 把图片转换为可直接发布和采购的拼豆图纸：输出带�
 ## 安装与验证
 
 ```bash
-cd E:\M_Workbench\MirrorPin
+git clone https://github.com/lmy414/MirrorPin.git
+cd MirrorPin
 npm install
 npm run build
 npm test
@@ -50,9 +51,9 @@ npx tsc --noEmit
 ## CLI
 
 ```bash
-node E:\M_Workbench\MirrorPin\dist\cli.js <input> -o <output.png> [选项]
-node E:\M_Workbench\MirrorPin\dist\cli.js <input> --materials <materials.csv> [选项]
-node E:\M_Workbench\MirrorPin\dist\cli.js --help
+node ./dist/cli.js <input> -o <output.png> [选项]
+node ./dist/cli.js <input> --materials <materials.csv> [选项]
+node ./dist/cli.js --help
 ```
 
 CLI 0.3.0 默认：`guided + area + spatial on + top-K 8`，预降色关闭，抖动关闭。
@@ -77,9 +78,9 @@ CLI 0.3.0 默认：`guided + area + spatial on + top-K 8`，预降色关闭，�
 示例：
 
 ```bash
-node E:\M_Workbench\MirrorPin\dist\cli.js "E:\Downloads\Q13_peek_探头.png" \
-  -o "E:\M_Workbench\MirrorPin\output\Q13_pattern.png" \
-  --materials "E:\M_Workbench\MirrorPin\output\Q13_materials.csv" \
+node ./dist/cli.js "./input.png" \
+  -o "./output/pattern.png" \
+  --materials "./output/materials.csv" \
   --palette mard221 --min-beads 5
 ```
 
@@ -112,12 +113,13 @@ import {
 } from 'mirrorpin-core';
 ```
 
-`generatePatternBead()` 是唯一产品主管线。`E:\M_Workbench\MirrorPin\src\core\pipeline.ts` 的旧多管线入口仅保留兼容，不用于 CLI、Webapp 或 minitool 默认生成。
+`generatePatternBead()` 是唯一产品主管线。`src/core/pipeline.ts` 的旧多管线入口仅保留兼容，不用于 CLI、Webapp 或 minitool 默认生成。
 
 ## Webapp
 
+在仓库根目录运行：
+
 ```bash
-cd E:\M_Workbench\MirrorPin
 npm run build:webapp
 npm run serve:webapp
 ```
@@ -136,7 +138,7 @@ npm run serve:webapp
 npm run build:webapp-deploy
 ```
 
-产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip`。ZIP 根目录含 `index.html` 以及 `generating/`、`result/`、`error/` 物理路由目录，无需 rewrite；服务器需将 `.mjs` 返回为 JavaScript MIME。
+产物：`output/mirrorpin-webapp-deploy.zip`。ZIP 根目录含 `index.html` 以及 `generating/`、`result/`、`error/` 物理路由目录，无需 rewrite；服务器需将 `.mjs` 返回为 JavaScript MIME。
 
 ## Minitool
 
@@ -144,7 +146,7 @@ npm run build:webapp-deploy
 npm run build:minitool
 ```
 
-产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-minitool.zip`。minitool 与 Webapp 使用同一 Worker 协议、算法版本和质量 profile。
+产物：`output/mirrorpin-minitool.zip`。minitool 与 Webapp 使用同一 Worker 协议、算法版本和质量 profile。
 
 ## 验收工具
 
@@ -153,7 +155,7 @@ npm run build
 npm run acceptance -- --boards 52x52,78x78,104x104,78x52 --runs 3
 ```
 
-验收输出位于 `E:\M_Workbench\MirrorPin\output\acceptance\<timestamp>\`，包含：
+验收输出位于 `output/acceptance/<timestamp>/`，包含：
 
 - `manifest.json`、`metrics.json`、`timing.json`；
 - 每素材/板规的 baseline 与 clean PNG、指标和三次 SHA-256；
@@ -161,7 +163,7 @@ npm run acceptance -- --boards 52x52,78x78,104x104,78x52 --runs 3
 
 验收覆盖平坦区域杂色、边缘保留、细线还原和结果可复现性，并覆盖 52×52、78×78、104×104 与 78×52 板规。
 
-最近一次完整验收（2026-09-01）覆盖 20 个素材/板规案例，连续三次生成结果一致，全部质量检查通过。报告位于 `E:\M_Workbench\MirrorPin\output\acceptance\2026-09-01T14-28-33-628Z\manifest.json`。
+最近一次完整验收（2026-09-01）覆盖 20 个素材/板规案例，连续三次生成结果一致，全部质量检查通过。报告位于 `output/acceptance/2026-09-01T14-28-33-628Z/manifest.json`。
 
 ## 输出说明
 

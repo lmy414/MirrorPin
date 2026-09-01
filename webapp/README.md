@@ -8,8 +8,9 @@
 
 ## 运行
 
+在仓库根目录运行：
+
 ```bash
-cd E:\M_Workbench\MirrorPin
 npm run build:webapp
 npm run serve:webapp
 ```
@@ -18,15 +19,15 @@ npm run serve:webapp
 
 ## 架构
 
-- `E:\M_Workbench\MirrorPin\webapp\pages\*.html`：上传、生成中、结果、错误四个物理页面。
-- `E:\M_Workbench\MirrorPin\webapp\generating\index.html`、`result\index.html`、`error\index.html`：根级无扩展名路由别名，不依赖服务器 rewrite。
-- `E:\M_Workbench\MirrorPin\webapp\app\main.mjs`：页面控制、IndexedDB 恢复、下载与 requestId/stale-result 防护。
-- `E:\M_Workbench\MirrorPin\webapp\app\params.mjs`：可测试的参数解析、旧记录迁移与完整表单恢复；当前参数 schema 保留用户明确改动。
-- `E:\M_Workbench\MirrorPin\webapp\entry.worker.ts`：Worker 源码，调用共享 `runWorkerGeneration()`。
-- `E:\M_Workbench\MirrorPin\webapp\app\algo.worker.mjs`：构建生成的 Worker bundle。
-- `E:\M_Workbench\MirrorPin\webapp\app\algo.mjs`：主线程只保留板规、profile、渲染与材料统计。
-- `E:\M_Workbench\MirrorPin\webapp\app\styles.css`：本地 Tailwind 构建产物，无 CDN。
-- `E:\M_Workbench\MirrorPin\webapp\app\icons.mjs`：本地图标，无外部脚本。
+- `webapp/pages/*.html`：上传、生成中、结果、错误四个物理页面。
+- `webapp/generating/index.html`、`webapp/result/index.html`、`webapp/error/index.html`：根级无扩展名路由别名，不依赖服务器 rewrite。
+- `webapp/app/main.mjs`：页面控制、IndexedDB 恢复、下载与 requestId/stale-result 防护。
+- `webapp/app/params.mjs`：可测试的参数解析、旧记录迁移与完整表单恢复；当前参数 schema 保留用户明确改动。
+- `webapp/entry.worker.ts`：Worker 源码，调用共享 `runWorkerGeneration()`。
+- `webapp/app/algo.worker.mjs`：构建生成的 Worker bundle。
+- `webapp/app/algo.mjs`：主线程只保留板规、profile、渲染与材料统计。
+- `webapp/app/styles.css`：本地 Tailwind 构建产物，无 CDN。
+- `webapp/app/icons.mjs`：本地图标，无外部脚本。
 
 Worker 进度阶段：`prepare / resample / candidates / optimize / cleanup / done`。完成消息包含 `requestId`、`diagnostics`、耗时和 `algorithmVersion`。
 
@@ -40,7 +41,7 @@ Worker 进度阶段：`prepare / resample / candidates / optimize / cleanup / do
 npm run build:webapp-deploy
 ```
 
-产物：`E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip`
+产物：`output/mirrorpin-webapp-deploy.zip`
 
 ZIP 根目录含 `index.html`、`DEPLOYMENT.md`、`deployment.json` 和 `generating/`、`result/`、`error/` 路由目录。静态服务器只需：
 

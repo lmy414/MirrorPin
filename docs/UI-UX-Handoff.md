@@ -1,7 +1,7 @@
 # 前端 v1 交接文档 · MirrorPin 拼豆图纸（纯前端一次性成图）
 
 > **面向**：前端工程师 / UI-UX 设计师 / 产品  
-> **范围**：基于 `E:\M_Workbench\MirrorPin` 0.3.0（统一 clean 默认：`guided+area+spatial`）的纯前端、一次性成图流程
+> **范围**：基于 MirrorPin 0.3.0（统一 clean 默认：`guided+area+spatial`）的纯前端、一次性成图流程
 > **不做**：实时拖杆预览 / 逐格手改 / 后端存储与鉴权 / 批量队列 / 付费  
 
 ---
@@ -16,7 +16,7 @@
 
 ### 1.1 管线事实（唯一真相源）
 
-`E:\M_Workbench\MirrorPin\src\beadpattern\core.ts:generatePatternBead`
+`src/beadpattern/core.ts:generatePatternBead`
 
 ```
 source ForegroundMask → mask-aware crop/extension/smooth → area/DPID GridSamples →
@@ -47,11 +47,11 @@ top-K MARD CIEDE2000 候选 → 边缘敏感 Potts/ICM → 置信度小区域清
 | 渲染规格 | `cell/board/gutter/title/show*` | 像素 | 折叠（高级） | 纸面默认 `cell40/board29`，普通用户无需感知 |
 | 白底阈值 | `backgroundTolerance` | 数值 | 折叠（高级） | 去白底的 CIEDE2000 阈值，默认 12 |
 
-> **结论**：主区 4 项 + 图片本身；其余 6 组收进**默认折叠的高级设置**，经 `E:\M_Workbench\MirrorPin\src\board.ts:TopLevelOptions.advanced` 展开。未展开时一律取最优默认。
+> **结论**：主区 4 项 + 图片本身；其余 6 组收进**默认折叠的高级设置**，经 `src/board.ts:TopLevelOptions.advanced` 展开。未展开时一律取最优默认。
 
 ### 1.3 前端顶层 API
 
-`E:\M_Workbench\MirrorPin\src\board.ts`
+`src/board.ts`
 
 ```ts
 export type BoardSpec = '52x52' | '78x78' | '104x104' | '78x52';
@@ -95,7 +95,7 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 
 ### 1.4 现状与纯前端约束
 
-- 当前实现位于 `E:\M_Workbench\MirrorPin\webapp`：静态上传/生成中/结果/错误四页，使用 `createImageBitmap→canvas.getImageData` 解码，按一次性表单提交，不做实时重算。
+- 当前实现位于 `webapp/`：静态上传/生成中/结果/错误四页，使用 `createImageBitmap→canvas.getImageData` 解码，按一次性表单提交，不做实时重算。
 - 旧实时滑杆与旧 k-means 页面管线不参与当前产品；预降色只作为高级 API 兼容能力，Webapp 默认关闭。
 - 全流程本地：主线程负责解码、页面状态与渲染；`generateForBoard` 在 Web Worker 中执行。Worker 回传 `prepare/resample/candidates/optimize/cleanup/done` 真实阶段、diagnostics、耗时和算法版本；取消会终止 Worker，requestId 用于丢弃 stale result。
 - 数据处理：图片处理和图纸生成均在浏览器本地完成，当前会话数据保存在浏览器 IndexedDB。页面运行时只加载部署包内的 HTML/CSS/ESM/Worker 资产，不依赖 CDN。
@@ -173,10 +173,10 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 
 ## 4. 工程交接
 
-- **算法入口**：`E:\M_Workbench\MirrorPin\src\board.ts:generateForBoard`（板规与色卡映射已定；其余 16 项在 `advanced` 折叠中）。
-- **渲染**：`E:\M_Workbench\MirrorPin\src\render\pattern.ts:renderPatternImage`（浏览器位图字体，零依赖；清单来自 `E:\M_Workbench\MirrorPin\src\render\node.ts:countGridMaterials`）。
-- **解码**：沿用 `E:\M_Workbench\MirrorPin\web\src\lib\decode.ts` 的 `createImageBitmap`；`web/src/lib/pipeline.ts` 的旧 kmeans 路径废弃。
-- **构建**：当前交付入口为 `E:\M_Workbench\MirrorPin\webapp` 静态四页；`npm run build:webapp` 用本地 Tailwind CLI 与 esbuild 生成主线程/Worker 模块，`npm run build:webapp-deploy` 生成自包含 ZIP。
+- **算法入口**：`src/board.ts:generateForBoard`（板规与色卡映射已定；其余 16 项在 `advanced` 折叠中）。
+- **渲染**：`src/render/pattern.ts:renderPatternImage`（浏览器位图字体，零依赖；清单来自 `src/render/node.ts:countGridMaterials`）。
+- **解码**：沿用 `web/src/lib/decode.ts` 的 `createImageBitmap`；`web/src/lib/pipeline.ts` 的旧 kmeans 路径废弃。
+- **构建**：当前交付入口为 `webapp/` 静态四页；`npm run build:webapp` 用本地 Tailwind CLI 与 esbuild 生成主线程/Worker 模块，`npm run build:webapp-deploy` 生成自包含 ZIP。
 - **产研边界**：实验性预处理与研究代码继续排除在主干代码、产品文档和部署包之外；产品只依赖本版统一 clean 管线。
 
 ---
@@ -199,4 +199,4 @@ const { grid } = generateForBoard(rgba, { board: '78x78', palette: 'mard221', mi
 - [ ] 高级展开后改参可生效且可一键恢复默认；
 - [ ] 生成中可取消/重试，完成后可下载 PNG 与 CSV（含信息条）；
 - [ ] 页脚含简洁的本地处理说明；
-- [ ] `E:\M_Workbench\MirrorPin\webapp` 可完成源码构建，且 `E:\M_Workbench\MirrorPin\output\mirrorpin-webapp-deploy.zip` 解压后的根入口可直接加载。
+- [ ] `webapp/` 可完成源码构建，且 `output/mirrorpin-webapp-deploy.zip` 解压后的根入口可直接加载。

@@ -40,6 +40,8 @@ describe('self-contained webapp deployment', () => {
       readFileSync(resolve(root, 'CHANGELOG.md'), 'utf8'),
     ].join('\n');
 
+    expect(publicDocs).not.toMatch(/(?:^|[^A-Za-z0-9])[A-Z]:[\\/]/i);
+
     for (const phrase of [
       '用户指定的本地素材',
       '不伪造语义标注',
@@ -52,6 +54,31 @@ describe('self-contained webapp deployment', () => {
     expect(publicDocs).toContain(
       '图片处理和图纸生成均在浏览器本地完成，图片和生成结果保留在当前设备',
     );
+  });
+
+  it('keeps release text assets free of development-machine paths', () => {
+    const releaseTextAssets = [
+      resolve(root, 'minitool', 'index.html'),
+      resolve(root, 'minitool', 'assets', 'main.js'),
+      resolve(root, 'minitool', 'assets', 'style.css'),
+      resolve(root, 'webapp', 'index.html'),
+      resolve(root, 'webapp', 'DEPLOYMENT.md'),
+      resolve(root, 'webapp', 'app', 'main.mjs'),
+      resolve(root, 'webapp', 'app', 'params.mjs'),
+      resolve(root, 'webapp', 'app', 'icons.mjs'),
+      ...['index', 'generating', 'result', 'error'].map((name) =>
+        resolve(root, 'webapp', 'pages', `${name}.html`),
+      ),
+      ...['generating', 'result', 'error'].map((name) =>
+        resolve(root, 'webapp', name, 'index.html'),
+      ),
+    ];
+
+    for (const file of releaseTextAssets) {
+      expect(readFileSync(file, 'utf8')).not.toMatch(
+        /(?:^|[^A-Za-z0-9])[A-Z]:[\\/]/i,
+      );
+    }
   });
 
   it('ships the shared surface system and accessible staged progress UI', () => {
