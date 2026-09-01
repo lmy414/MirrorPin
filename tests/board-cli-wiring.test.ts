@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateForBoard, generatePatternBead, MARD221 } from '../src';
+import { DEFAULT_GENERATION_OPTIONS, generateForBoard, generatePatternBead, MARD221 } from '../src';
 import { convert, parseArgs } from '../cli/index';
 import { makeImage } from './helpers';
 
@@ -8,6 +8,18 @@ describe('board/core/CLI 接线', () => {
     const args = parseArgs(['in.png', '-o', 'ignored.png']);
     expect(args.blur).toBeUndefined();
   });
+  it('generateForBoard defaults are direct-core equivalent to canonical clean defaults', () => {
+    const img = makeImage(10, 6, (x, y) => [x * 20, y * 30, 100, 255]);
+    const board = generateForBoard(img, { board: '52x52', palette: 'mard221', cropToSubject: false });
+    const core = generatePatternBead(img, {
+      fixed: { w: 52, h: 52 }, fill: true, cropToSubject: false, palette: MARD221,
+      profile: 'clean', smooth: DEFAULT_GENERATION_OPTIONS.smooth, scale: DEFAULT_GENERATION_OPTIONS.scale,
+      dither: DEFAULT_GENERATION_OPTIONS.dither, spatial: DEFAULT_GENERATION_OPTIONS.spatial,
+      minBeads: DEFAULT_GENERATION_OPTIONS.minBeads,
+    });
+    expect(board.grid.cells).toEqual(core.cells);
+  });
+
   it('generateForBoard 与相同 core 选项输出一致', () => {
     const img = makeImage(16, 10, (x, y) => [x * 12, y * 20, 100, 255]);
     const board = generateForBoard(img, {

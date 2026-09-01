@@ -15,6 +15,8 @@ export interface GridSamples {
   edgeX: Float32Array;
   /** Linear RGB edge magnitude toward the lower neighbor. */
   edgeY: Float32Array;
+  /** Number of internal source-integration passes used to produce these samples. */
+  integrationPasses?: number;
 }
 
 export interface ResampleOptions {
@@ -45,6 +47,7 @@ export function areaResampleToGrid(
 ): GridSamples {
   validateInputs(img, width, height, options.mask);
   const result = allocateGrid(width, height);
+  result.integrationPasses = 1;
   integrateArea(img, result, options.mask);
   computeEdges(result);
   return result;
@@ -69,6 +72,7 @@ export function dpidResampleToGrid(
   if (lambda === 0) return area;
 
   const result = allocateGrid(width, height);
+  result.integrationPasses = (area.integrationPasses ?? 1) + 1;
   result.coverage.set(area.coverage);
   const localSrgb = localBaseSrgb(area);
   const cellWidth = img.width / width;

@@ -1,4 +1,4 @@
-// 算法管线编排：位图 → 图纸网格（采样 → 匹配 → 合并 → 去背景）。
+// @deprecated Legacy pipeline entry points; use generatePatternBead for product generation.
 
 import type { Cell, Grid, RgbaImage, Swatch } from './types';
 import { sampleGrid, type SampleMode } from './grid';
@@ -32,6 +32,7 @@ const DEFAULTS = {
 };
 
 /** 由位图生成拼豆图纸网格（内存模型，不含文件导出） */
+/** @deprecated Legacy pipeline; use generatePatternBead for product generation. */
 export function generatePattern(img: RgbaImage, options: GenerateOptions): Grid {
   const palette = options.palette ?? (MARD291 as readonly Swatch[]);
   const rows = options.rows ?? options.cols;
@@ -82,6 +83,7 @@ export interface MapFirstOptions {
  * （每格取格内众数色号）。与 generatePattern（先采样后匹配）对比顺序差异。
  * 为隔离顺序本身，本函数不做区域合并，也不做背景移除。
  */
+/** @deprecated Legacy pipeline; use generatePatternBead for product generation. */
 export function generatePatternMapFirst(img: RgbaImage, options: MapFirstOptions): Grid {
   const palette = options.palette ?? (MARD291 as readonly Swatch[]);
   const rows = options.rows ?? options.cols;
@@ -168,6 +170,7 @@ export interface AdvancedOptions {
  * 3. 区域合并除杂
  * 4. 用估计的真实背景色做边界连通移除（而非固定的近白）
  */
+/** @deprecated Legacy pipeline; use generatePatternBead for product generation. */
 export function generatePatternAdvanced(img: RgbaImage, options: AdvancedOptions): Grid {
   const palette = options.palette ?? (MARD291 as readonly Swatch[]);
   const rows = options.rows ?? options.cols;
@@ -274,6 +277,7 @@ export interface SoftOptions {
  * 用户确认的管线顺序：全图模糊(降杂色) -> 色卡映射 -> 像素化(格内众数)。
  * 组合了主体裁剪占满与智能背景（透明/有色）。
  */
+/** @deprecated Legacy pipeline; use generatePatternBead for product generation. */
 export function generatePatternSoft(img: RgbaImage, options: SoftOptions): Grid {
   const palette = options.palette ?? (MARD291 as readonly Swatch[]);
   const rows = options.rows ?? options.cols;

@@ -25,11 +25,18 @@ import {
   gridSamplesToRgba,
 } from '../core/resample';
 import { quantizeImage } from '../core/color-quantize';
+import { normalizeSwatches } from '../core/palette';
+import { buildPaletteCandidates } from '../core/palette-candidates';
+import { optimizeSpatialLabels } from '../core/spatial-quantize';
+import { cleanupSpatialLabels, enforceSpatialColorBudget, computeSpatialLabelEnergy, createOperationBudget } from '../core/label-regions';
+import { DEFAULT_GENERATION_OPTIONS, GENERATION_PROFILES, resolveSpatialQuantizeOptions } from '../core/options';
+import { measureSpatialFragmentation } from '../core/quantize';
+import type { PipelineDiagnostics } from '../core/types';
 
 /** 保边平滑算法（转像素前应用） */
 export type SmoothKind = 'none' | 'gauss' | 'guided' | 'l0';
 /** 降采样算法 */
-export type ScaleKind = 'box' | 'dpid';
+export type ScaleKind = 'box' | 'area' | 'dpid';
 
 // ---------------------------------------------------------------------------
 // 内部表示：网格 = 扁平 RGBA(gw*gh*4)；色卡 = codes/hexes/rgb(0..255)/lab
@@ -43,17 +50,17 @@ interface BeadPalette {
 }
 
 export function buildBeadPalette(swatches: readonly Swatch[]): BeadPalette {
+  const canonical = normalizeSwatches(swatches);
   const codes: string[] = [];
   const hexes: string[] = [];
   const rgb: number[][] = [];
   const lab: Lab[] = [];
-  for (const s of swatches) {
+  for (const s of canonical) {
     const r = parseInt(s.hex.slice(0, 2), 16);
     const g = parseInt(s.hex.slice(2, 4), 16);
     const b = parseInt(s.hex.slice(4, 6), 16);
-    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) continue;
     codes.push(s.code);
-    hexes.push(s.hex.toUpperCase());
+    hexes.push(s.hex);
     rgb.push([r, g, b]);
     lab.push(srgbToLab({ r, g, b }));
   }
@@ -450,8 +457,8 @@ export function mergeRareIdx(idx: Int32Array, palette: BeadPalette, minBeads: nu
 // 编排：generatePatternBead
 // ---------------------------------------------------------------------------
 
-export interface BeadDiagnostics {
-  resamplePasses: number;
+export interface BeadDiagnostics extends Partial<PipelineDiagnostics> {
+  resamplePasses?: number;
   resampleMethod?: 'area' | 'dpid';
   sourceFloodApplied?: boolean;
 }
@@ -462,10 +469,13 @@ export interface ResampleEvent {
 }
 
 export type ResampleHook = (event: ResampleEvent) => void;
+export type GenerationStage = 'prepare' | 'resample' | 'candidates' | 'optimize' | 'cleanup' | 'done';
+export interface ProgressEvent { stage: GenerationStage; progress: number }
+export type ProgressHook = (event: ProgressEvent) => void;
 
 export interface BeadOptions {
   palette?: readonly Swatch[];
-  /** 网格最大边长（auto 模式，按原图比例取另一边） @default 50（库默认；CLI 默认 64） */
+  /** 网格最大边长（auto 模式，按原图比例取另一边） */
   maxSide?: number;
   /** 固定尺寸（如 58x58），此时按比例居中补透明 */
   fixed?: { w: number; h: number };
@@ -476,11 +486,13 @@ export interface BeadOptions {
   dither?: boolean;
   despeckle?: boolean;
   maxColors?: number;
+  /** Shared cleanup/color operation budget. */
+  maxOperations?: number;
   /** 稀有色合并阈值：用量低于该值的色号就近并入邻近色（0/1=关） */
   minBeads?: number;
   /** flood 去背景 CIEDE2000 阈值 */
   backgroundTolerance?: number;
-  /** 转像素前的 mask-aware 保边平滑（库默认 none；board guided；CLI l0）。l0 使用 bbox 隔离延拓。 */
+  /** 转像素前的 mask-aware 保边平滑；l0 使用 bbox 隔离延拓。 */
   smooth?: SmoothKind;
   /** gauss 平滑 σ（smooth='gauss' 时生效），默认 1 */
   smoothSigma?: number;
@@ -490,7 +502,7 @@ export interface BeadOptions {
   smoothRadius?: number;
   /** 引导滤波正则（smooth='guided' 时生效，0..255 尺度），默认 100 */
   smoothEps?: number;
-  /** 降采样算法（默认 box）；auto/fixed/fill 均由统一重采样器直接输出目标网格 */
+  /** 降采样算法；auto/fixed/fill 均由统一重采样器直接输出目标网格 */
   scale?: ScaleKind;
   /** DPID 细节权重指数（scale='dpid' 时生效），默认 1.0；0 精确退化为 area */
   dpidLambda?: number;
@@ -498,12 +510,20 @@ export interface BeadOptions {
   colorQuantize?: ColorQuantizeOptions;
   /** @internal 测试/诊断输出，不参与图像行为。 */
   diagnostics?: BeadDiagnostics;
+  /** Spatial quantization; defaults to the clean product profile. */
+  spatial?: Partial<import('../core/types').SpatialQuantizeOptions>;
+  /** Explicit profile; legacy keeps direct matching and no spatial optimization. */
+  profile?: 'clean' | 'legacy';
+  /** Progress callback; never serialized into worker payloads. */
+  onProgress?: ProgressHook;
+  /** Optional cancellation hook checked at stage boundaries. */
+  shouldCancel?: () => boolean;
   /** @internal library-only hook; functions are not intended for worker serialization. */
   onResample?: ResampleHook;
 }
 
 const DEFAULTS_BEAD = {
-  maxSide: 50, // 库默认 50，CLI 默认 64（见 cli/index.ts:parseArgs）
+  maxSide: 50,
   /** 默认 none：只按透明通道裁主体，有色背景保留；'flood' 用 CIEDE2000 按颜色清纯背景 */
   removeBg: 'none' as 'none',
   despeckle: false,
@@ -532,113 +552,148 @@ function chooseGrid(img: RgbaImage, opts: BeadOptions): { gw: number; gh: number
 
 /**
  * 转像素管线（bead 思路，TS 版）：
- * 源图 foreground mask/flood → mask-aware crop/fill → mask RGB 延拓隔离 → smooth
+ * 源图 foreground mask/flood → mask-aware crop/fill → 可选颜色量化 → mask RGB 延拓隔离 → smooth
  * → area/DPID 一次输出目标网格 → CIEDE2000 匹配 → 后处理。
  * flood 置信度不足时安全退化为 alpha-only，宁可保留背景也不猜测删除主体。
  */
 export function generatePatternBead(img: RgbaImage, options: BeadOptions): Grid {
-  const palette = buildBeadPalette(options.palette ?? MARD291);
-  if (palette.codes.length === 0) throw new Error('palette 不能为空');
+  const started = Date.now();
+  const diagnostics = options.diagnostics;
+  const stages: GenerationStage[] = [];
+  const timings: Record<string, number> = {};
+  const emit = (stage: GenerationStage): void => {
+    if (options.shouldCancel?.()) throw new Error('生成已取消');
+    stages.push(stage);
+    options.onProgress?.({ stage, progress: stage === 'prepare' ? 0 : stage === 'resample' ? 20 : stage === 'candidates' ? 40 : stage === 'optimize' ? 65 : stage === 'cleanup' ? 85 : 100 });
+  };
+  const timed = <T>(stage: GenerationStage, fn: () => T): T => {
+    const at = Date.now();
+    try {
+      emit(stage);
+      return fn();
+    } finally {
+      timings[stage] = Date.now() - at;
+      if (diagnostics) diagnostics.timings = { ...timings };
+    }
+  };
+  const profile = options.profile ?? 'clean';
+  const spatial = resolveSpatialQuantizeOptions({ ...DEFAULT_GENERATION_OPTIONS.spatial, ...(options.spatial ?? {}), enabled: profile === 'legacy' ? false : options.spatial?.enabled ?? DEFAULT_GENERATION_OPTIONS.spatial.enabled });
+  const rawSwatches = options.palette ?? MARD291;
+  const canonicalSwatches = normalizeSwatches(rawSwatches);
+  if (canonicalSwatches.length === 0) throw new Error('palette 不能为空');
+  if (options.maxColors !== undefined && (!Number.isInteger(options.maxColors) || options.maxColors < 0)) throw new Error('maxColors 必须为非负整数');
+  if (options.minBeads !== undefined && (!Number.isInteger(options.minBeads) || options.minBeads < 0)) throw new Error('minBeads 必须为非负整数');
+  const useDither = options.dither ?? (profile === 'legacy' ? GENERATION_PROFILES.legacy.dither : DEFAULT_GENERATION_OPTIONS.dither);
+  if (useDither && spatial.enabled) throw new Error('dither 与 spatial clean mode 不兼容；请显式 profile=legacy 或关闭 spatial');
+  const palette = buildBeadPalette(canonicalSwatches);
   const removeBg = options.removeBg ?? DEFAULTS_BEAD.removeBg;
   const tol = options.backgroundTolerance ?? DEFAULTS_BEAD.backgroundTolerance;
   if (!Number.isFinite(tol) || tol < 0) throw new Error('backgroundTolerance 必须为有限非负数');
 
-  // 1. 源图阶段统一构建连续 coverage mask；flood 不再在缩格后猜背景。
-  let work = options.colorQuantize ? quantizeImage(img, options.colorQuantize) : img;
-  let mask: ForegroundMask = buildForegroundMask(work, {
-    mode: removeBg,
-    tolerance: tol,
-    alpha: { threshold: 128 },
+  let work = img;
+  let mask!: ForegroundMask;
+  let chosen!: { gw: number; gh: number; fit: boolean };
+  const smooth = options.smooth ?? (profile === 'legacy' ? GENERATION_PROFILES.legacy.smooth : DEFAULT_GENERATION_OPTIONS.smooth);
+  timed('prepare', () => {
+    mask = buildForegroundMask(work, { mode: removeBg, tolerance: tol, alpha: { threshold: 128 } });
+    if (options.cropToSubject) ({ image: work, mask } = cropImageAndMaskToSubject(work, mask));
+    chosen = chooseGrid(work, options);
+    if (options.fill && chosen.fit) ({ image: work, mask } = cropImageAndMaskToAspect(work, mask, chosen.gw, chosen.gh));
+    if (smooth === 'gauss') {
+      const sigma = options.smoothSigma ?? 1;
+      if (!Number.isFinite(sigma) || sigma <= 0 || sigma > 64) throw new Error('smoothSigma 必须为 finite、正数且不超过 64');
+      work = applyMaskForSmoothing(work, mask, (tile, coverage) => gaussianBlur(tile, sigma, coverage));
+    } else if (smooth === 'guided') {
+      work = applyMaskForSmoothing(work, mask, (tile, coverage) => guidedSmooth(tile, { r: options.smoothRadius ?? 8, eps: options.smoothEps ?? 100, coverage }));
+    } else if (smooth === 'l0') {
+      work = applyMaskForSmoothing(extendMaskedRgb(work, mask), mask, (tile) => l0Smooth(tile, { lam: options.smoothLambda ?? 0.02 }));
+    } else if (smooth !== 'none') throw new Error(`smooth 非法: ${String(smooth)}`);
+    if (options.colorQuantize) work = quantizeImage(work, options.colorQuantize);
   });
-  if (options.cropToSubject) {
-    ({ image: work, mask } = cropImageAndMaskToSubject(work, mask));
-  }
 
-  // 2. fixed fill 在源图与 mask 上同步按目标比例裁剪；auto 直接按主体比例选网格。
-  const chosen = chooseGrid(work, options);
-  if (options.fill && chosen.fit) {
-    ({ image: work, mask } = cropImageAndMaskToAspect(work, mask, chosen.gw, chosen.gh));
-  }
-
-  // 3. mask-aware smoothing。none 完全不改写源 RGB；gauss/guided 使用
-  // coverage 加权的 straight-RGB 邻域，L0 仅在隔离 bbox 中做最近前景延拓。
-  const smooth = options.smooth ?? 'none';
-  if (smooth === 'gauss') {
-    const sigma = options.smoothSigma ?? 1;
-    if (!Number.isFinite(sigma) || sigma <= 0 || sigma > 64) throw new Error('smoothSigma 必须为 finite、正数且不超过 64');
-    work = applyMaskForSmoothing(work, mask, (tile, coverage) => gaussianBlur(tile, sigma, coverage));
-  } else if (smooth === 'guided') {
-    work = applyMaskForSmoothing(work, mask, (tile, coverage) => guidedSmooth(tile, {
-      r: options.smoothRadius ?? 8,
-      eps: options.smoothEps ?? 100,
-      coverage,
-    }));
-  } else if (smooth === 'l0') {
-    work = applyMaskForSmoothing(extendMaskedRgb(work, mask), mask, (tile) => l0Smooth(tile, { lam: options.smoothLambda ?? 0.02 }));
-  } else if (smooth !== 'none') {
-    throw new Error(`smooth 非法: ${String(smooth)}`);
-  }
-
-  // 4. area/DPID 一次性输出目标网格；fixed 不再跳过 DPID，也不二次 BOX。
-  const { gw, gh, fit } = chosen;
-  const scale = options.scale ?? 'box';
-  if (scale !== 'box' && scale !== 'dpid') throw new Error(`scale 非法: ${String(scale)}`);
-  const sampleOptions = { mask, lambda: options.dpidLambda ?? 1 };
+  const { gw, gh } = chosen;
+  const scale = options.scale ?? (profile === 'legacy' ? GENERATION_PROFILES.legacy.scale : DEFAULT_GENERATION_OPTIONS.scale);
+  if (scale !== 'box' && scale !== 'dpid' && scale !== 'area') throw new Error(`scale 非法: ${String(scale)}`);
   const method = scale === 'dpid' ? 'dpid' as const : 'area' as const;
-  let samples;
-  if (fit && !options.fill) {
-    options.onResample?.({ phase: 'fit', method });
-    samples = fitResampleToGrid(work, gw, gh, method, sampleOptions);
-  } else {
-    options.onResample?.({ phase: 'direct', method });
-    samples = method === 'dpid'
-      ? dpidResampleToGrid(work, gw, gh, sampleOptions)
-      : areaResampleToGrid(work, gw, gh, sampleOptions);
-  }
+  const samples = timed('resample', () => method === 'dpid'
+    ? dpidResampleToGrid(work, gw, gh, { mask, lambda: options.dpidLambda ?? 1 })
+    : areaResampleToGrid(work, gw, gh, { mask }));
+  options.onResample?.({ phase: 'direct', method });
   const sampled = gridSamplesToRgba(samples);
   const grid: GridRgba = { gw, gh, data: sampled.data };
-  const maskAlpha = new Uint8ClampedArray(sampled.data);
-  if (options.diagnostics) {
-    options.diagnostics.resamplePasses = (options.diagnostics.resamplePasses ?? 0) + 1;
-    options.diagnostics.resampleMethod = method;
-    options.diagnostics.sourceFloodApplied = removeBg === 'flood';
-  }
+  if (diagnostics) { diagnostics.resamplePasses = 1; diagnostics.actualResamplePasses = 1; diagnostics.internalIntegrationPasses = samples.integrationPasses ?? 1; diagnostics.resampleMethod = method; diagnostics.sourceFloodApplied = removeBg === 'flood'; }
 
-  // 5. 匹配（alpha >= 128 统一纳入）
-  let idx: Int32Array;
-  if (options.dither ?? DEFAULTS_BEAD.dither) {
-    idx = matchDitherData(grid, maskAlpha, palette);
+  const candidates = timed('candidates', () => buildPaletteCandidates(samples, canonicalSwatches, spatial.topK));
+  const initial = useDither ? matchDitherData(grid, sampled.data, palette) : matchDirectData(grid, sampled.data, palette);
+  const initialLabels = Uint16Array.from(initial, (value) => value < 0 ? 0 : value);
+  const validLabels = (): Int32Array => Int32Array.from(initial, (value) => value < 0 ? -1 : value);
+  let labels: Uint16Array;
+  let optimizerIterations = 0;
+  let energyBefore = 0;
+  let energyAfter = 0;
+  let optimizerEnergyBefore = 0;
+  let optimizerEnergyAfter = 0;
+  let cleanupEnergyBefore = 0;
+  let cleanupEnergyAfter = 0;
+  let colorBudgetEnergyBefore = 0;
+  let colorBudgetEnergyAfter = 0;
+  if (spatial.enabled && !useDither) {
+    const optimized = timed('optimize', () => optimizeSpatialLabels(samples, candidates, canonicalSwatches, spatial));
+    labels = optimized.labels; optimizerIterations = optimized.iterations; energyBefore = optimized.energyBefore; energyAfter = optimized.energyAfter;
+    optimizerEnergyBefore = optimized.energyBefore; optimizerEnergyAfter = optimized.energyAfter;
   } else {
-    idx = matchDirectData(grid, maskAlpha, palette);
+    emit('optimize');
+    labels = initialLabels;
+    energyBefore = computeSpatialLabelEnergy(samples, candidates, canonicalSwatches, labels, spatial);
+    energyAfter = energyBefore;
+    optimizerEnergyBefore = energyBefore; optimizerEnergyAfter = energyAfter;
+  }
+  const beforeMetrics = measureSpatialFragmentation(validLabels(), gw, gh);
+  const sharedBudget = createOperationBudget(options.maxOperations ?? Math.max(1, gw * gh * 3));
+  let cleanupOperationCount = 0;
+  let colorBudgetOperationCount = 0;
+
+  if (spatial.enabled && !useDither) {
+    cleanupEnergyBefore = computeSpatialLabelEnergy(samples, candidates, canonicalSwatches, labels, { smoothness: spatial.smoothness, edgeSigma: spatial.edgeSigma });
+    const cleaned = timed('cleanup', () => cleanupSpatialLabels(samples, candidates, canonicalSwatches, labels, { maxRegionSize: spatial.cleanupMaxSize, confidence: spatial.cleanupConfidence, smoothness: spatial.smoothness, edgeSigma: spatial.edgeSigma, operationBudget: sharedBudget }));
+    labels = cleaned.labels;
+    cleanupEnergyAfter = cleaned.diagnostics.energyAfter;
+    cleanupOperationCount = sharedBudget.count;
+    colorBudgetEnergyBefore = computeSpatialLabelEnergy(samples, candidates, canonicalSwatches, labels, { smoothness: spatial.smoothness, edgeSigma: spatial.edgeSigma });
+    const budgeted = enforceSpatialColorBudget(samples, candidates, canonicalSwatches, labels, { minBeads: options.minBeads ?? 0, maxColors: options.maxColors, smoothness: spatial.smoothness, edgeSigma: spatial.edgeSigma, operationBudget: sharedBudget });
+    labels = budgeted.labels; colorBudgetOperationCount = sharedBudget.count - cleanupOperationCount; colorBudgetEnergyAfter = budgeted.diagnostics.energyAfter; energyAfter = colorBudgetEnergyAfter;
+  } else {
+    emit('cleanup');
+    cleanupEnergyBefore = energyAfter;
+    cleanupEnergyAfter = energyAfter;
+    colorBudgetEnergyBefore = energyAfter;
+    colorBudgetEnergyAfter = energyAfter;
+    if (options.despeckle) {
+      const cleaned = despeckle(initial, gw, gh, 2);
+      labels = Uint16Array.from(cleaned, (value) => value < 0 ? 0 : value);
+    }
+    if (options.maxColors && options.maxColors > 0) labels = Uint16Array.from(limitColorsIdx(Int32Array.from(labels), palette, options.maxColors));
+    if ((options.minBeads ?? 0) > 1) labels = Uint16Array.from(mergeRareIdx(Int32Array.from(labels), palette, options.minBeads!));
   }
 
-  // 6. 后处理
-  if (options.despeckle) {
-    idx = despeckle(idx, gw, gh, 2);
-  }
-  if (options.maxColors && options.maxColors > 0) {
-    idx = limitColorsIdx(idx, palette, options.maxColors);
-  }
-  const minBeads = options.minBeads ?? 0;
-  if (minBeads > 1) {
-    idx = mergeRareIdx(idx, palette, minBeads);
-  }
-
-  // 7. 输出 Grid
+  const finalIdx = Int32Array.from(labels, (label, i) => samples.coverage[i]! < 0.5 ? -1 : label);
+  const afterMetrics = measureSpatialFragmentation(finalIdx, gw, gh);
   const cells: Grid['cells'] = [];
   for (let y = 0; y < gh; y++) {
-    const row = [];
+    const row: Grid['cells'][number] = [];
     for (let x = 0; x < gw; x++) {
-      const k = idx[y * gw + x]!;
-      if (k < 0) {
-        row.push({ code: '', hex: '', external: true });
-      } else {
-        row.push({ code: palette.codes[k]!, hex: palette.hexes[k]!, external: false });
-      }
+      const k = finalIdx[y * gw + x]!;
+      row.push(k < 0 ? { code: '', hex: '', external: true } : { code: palette.codes[k]!, hex: palette.hexes[k]!, external: false });
     }
     cells.push(row);
   }
   const colorSet = new Set<string>();
-  for (const r of cells) for (const c of r) if (!c.external) colorSet.add(c.code);
+  for (const row of cells) for (const cell of row) if (!cell.external) colorSet.add(cell.code);
+  emit('done');
+  if (diagnostics) {
+    const small = (metrics: typeof beforeMetrics) => metrics.componentCount ? metrics.singletonComponentCount / metrics.componentCount : 0;
+    const smallSnapshot = (metrics: typeof beforeMetrics) => metrics;
+    Object.assign(diagnostics, { componentCount: afterMetrics.componentCount, singletonComponentCount: afterMetrics.singletonComponentCount, singletonRatio: afterMetrics.singletonRatio, smallComponentCount: afterMetrics.smallComponentCount, smallComponentRatio: afterMetrics.smallComponentRatio, smallComponentThreshold: 2 as const, validCellCount: afterMetrics.validCellCount, boundaryCount: afterMetrics.boundaryCount, adjacencyCount: afterMetrics.adjacencyCount, boundaryRatio: afterMetrics.boundaryRatio, colorCountBefore: new Set(initial.filter((v, i) => v >= 0 && samples.coverage[i]! >= 0.5)).size, colorCountAfter: colorSet.size, singletonRatioBefore: beforeMetrics.singletonRatio, singletonRatioAfter: afterMetrics.singletonRatio, smallComponentRatioBefore: beforeMetrics.smallComponentRatio, smallComponentRatioAfter: afterMetrics.smallComponentRatio, optimizerIterations, energyBefore, energyAfter, optimizerEnergyBefore, optimizerEnergyAfter, cleanupEnergyBefore, cleanupEnergyAfter, colorBudgetEnergyBefore, colorBudgetEnergyAfter, totalEnergyBefore: optimizerEnergyBefore, totalEnergyAfter: colorBudgetEnergyAfter, stageOrder: [...stages], stages: [...stages], timings: { ...timings }, actualResamplePasses: 1, internalIntegrationPasses: samples.integrationPasses ?? 1, operationBudget: sharedBudget.limit, cleanupOperationCount, colorBudgetOperationCount, fragmentationBefore: smallSnapshot(beforeMetrics), fragmentationAfter: smallSnapshot(afterMetrics), labelsBefore: Array.from(initial), totalTimeMs: Date.now() - started });
+  }
   return { rows: gh, cols: gw, cells, colorCount: colorSet.size };
 }

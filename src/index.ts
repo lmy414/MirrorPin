@@ -11,6 +11,7 @@ export type {
   ResolvedColorQuantizeOptions,
   SpatialQuantizeOptions,
   PipelineDiagnostics,
+  FragmentationSnapshot,
   Swatch,
   Cell,
   Grid,
@@ -25,6 +26,10 @@ export {
   resolveColorQuantizeOptions,
   DEFAULT_SPATIAL_QUANTIZE_OPTIONS,
   resolveSpatialQuantizeOptions,
+  DEFAULT_GENERATION_OPTIONS,
+  GENERATION_PROFILES,
+  type CanonicalGenerationOptions,
+  type GenerationProfile,
 } from './core/options';
 export { isAlphaIncluded, cleanTransparentRgb, extendTransparentRgb } from './core/alpha';
 export {
@@ -60,6 +65,7 @@ export {
 export { sampleGrid, type SampleMode } from './core/grid';
 export { buildPalette, nearestSwatch, type PaletteEntry } from './core/palette';
 export { kmeansPalette, measureSpatialFragmentation, mulberry32, recoverEmptyCenters } from './core/quantize';
+export { normalizeSwatches } from './core/palette';
 export { deterministicSampleIndices, quantizeImage } from './core/color-quantize';
 export { mergeRegions, removeBackground } from './core/post';
 export {
@@ -69,7 +75,7 @@ export {
   generatePatternSoft,
   type GenerateOptions,
   type MapFirstOptions,
-  type AdvancedOptions,
+  type AdvancedOptions as LegacyPipelineAdvancedOptions,
   type SoftOptions,
 } from './core/pipeline';
 export { boxBlur, gaussianBlur } from './core/preprocess';
@@ -96,17 +102,38 @@ export {
   type ScaleKind,
   type ResampleEvent,
   type ResampleHook,
+  type GenerationStage,
+  type ProgressEvent,
+  type ProgressHook,
 } from './beadpattern/core';
 export { srgbToLab, ciede2000, type Lab } from './beadpattern/ciede2000';
-export { buildPaletteCandidates, type PaletteCandidates } from './core/palette-candidates';
+export { buildPaletteCandidates, validCell, type PaletteCandidates } from './core/palette-candidates';
 export { optimizeSpatialLabels, type SpatialQuantizeResult } from './core/spatial-quantize';
+export {
+  analyzeLabelRegions,
+  cleanupSpatialLabels,
+  enforceSpatialColorBudget,
+  mergeSpatialRareLabels,
+  computeSpatialLabelEnergy,
+  type RegionBBox,
+  type RegionStats,
+  type LabelRegionCleanupOptions,
+  type LabelCleanupDiagnostics,
+  type SpatialLabelsResult,
+  type SpatialColorBudgetOptions,
+  type SpatialColorDiagnostics,
+  type SpatialColorResult,
+  createOperationBudget,
+  type SharedOperationBudget,
+} from './core/label-regions';
 export { renderPatternImage, type RenderPatternOptions } from './render/pattern';
 export { renderPatternSvg, renderPatternPng, type RenderNodeOptions } from './render/node';
 export { countGridMaterials, type MaterialRow } from './core/materials';
 export {
   BOARD_PRESETS,
   generateForBoard,
-  type AdvancedOptions as BoardAdvancedOptions,
+  type BoardAdvancedOptions,
+  type BoardAdvancedOptions as AdvancedOptions,
   type BoardSpec,
   type GenerateResult as BoardGenerateResult,
   type PaletteId,

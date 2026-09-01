@@ -1,6 +1,7 @@
 import type { GridSamples } from './resample';
 import type { SpatialQuantizeOptions, Swatch } from './types';
 import { hexToRgb } from './color';
+import { normalizeSwatches } from './palette';
 import { srgbToLab, ciede2000, type Lab } from '../beadpattern/ciede2000';
 import { type PaletteCandidates, validCell } from './palette-candidates';
 
@@ -243,6 +244,8 @@ function validateInputs(
   if (!Number.isInteger(samples.width) || samples.width < 1 || !Number.isInteger(samples.height) || samples.height < 1) {
     throw new Error('GridSamples width/height 必须为正整数');
   }
+  const canonicalPalette = normalizeSwatches(palette);
+  if (canonicalPalette.length !== palette.length) throw new Error('palette 必须使用已验证的规范色板');
   const count = samples.width * samples.height;
   if (samples.linearRgb.length !== count * 3 || samples.coverage.length !== count || samples.variance.length !== count
     || samples.edgeX.length !== count || samples.edgeY.length !== count) throw new Error('GridSamples 数组长度不匹配');

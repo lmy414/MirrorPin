@@ -1,6 +1,7 @@
 import type { GridSamples } from './resample';
 import type { Swatch } from './types';
 import { hexToRgb } from './color';
+import { normalizeSwatches } from './palette';
 import { srgbToLab, ciede2000, type Lab } from '../beadpattern/ciede2000';
 import { requirePositiveInteger } from './options';
 
@@ -21,15 +22,16 @@ export function buildPaletteCandidates(
 ): PaletteCandidates {
   validateSamples(samples);
   requirePositiveInteger('topK', requestedTopK);
-  if (palette.length === 0) throw new Error('色板不能为空');
-  const topK = Math.min(requestedTopK, palette.length);
+  const canonicalPalette = normalizeSwatches(palette);
+  if (canonicalPalette.length === 0) throw new Error('色板不能为空');
+  const topK = Math.min(requestedTopK, canonicalPalette.length);
   const count = samples.width * samples.height;
   const labels = new Uint16Array(count * topK);
   const costs = new Float32Array(count * topK);
   costs.fill(Infinity);
   const bestMargin = new Float32Array(count);
-  const paletteLabs = palette.map((swatch) => srgbToLab(hexToRgb(swatch.hex)));
-  if (palette.length > 65535) throw new Error('色板长度不能超过 65535');
+  const paletteLabs = canonicalPalette.map((swatch) => srgbToLab(hexToRgb(swatch.hex)));
+  if (canonicalPalette.length > 65535) throw new Error('色板长度不能超过 65535');
 
   for (let pixel = 0; pixel < count; pixel++) {
     validateSampleCell(samples, pixel);
@@ -44,7 +46,7 @@ export function buildPaletteCandidates(
       index,
       cost: ciede2000(target, lab),
     }));
-    ranked.sort((a, b) => a.cost - b.cost || comparePalette(palette, a.index, b.index));
+    ranked.sort((a, b) => a.cost - b.cost || comparePalette(canonicalPalette, a.index, b.index));
     for (let rank = 0; rank < topK; rank++) {
       labels[pixel * topK + rank] = ranked[rank]!.index;
       costs[pixel * topK + rank] = Math.fround(ranked[rank]!.cost);
@@ -68,7 +70,7 @@ function linearToSrgb(value: number): number {
 }
 
 export function validCell(samples: GridSamples, pixel: number): boolean {
-  if (!(samples.coverage[pixel]! > 0)) return false;
+  if (!(samples.coverage[pixel]! >= 0.5)) return false;
   const rgb = pixel * 3;
   return Number.isFinite(samples.linearRgb[rgb]!)
     && Number.isFinite(samples.linearRgb[rgb + 1]!)

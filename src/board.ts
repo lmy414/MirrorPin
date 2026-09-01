@@ -3,7 +3,9 @@
 // - 高级（折叠）：平滑/降采样/限色/抖动/阈值/渲染像素值
 
 import type { ColorQuantizeOptions, RgbaImage, Grid } from './core/types';
+import { DEFAULT_GENERATION_OPTIONS } from './core/options';
 import { generatePatternBead, type SmoothKind, type ScaleKind } from './beadpattern/core';
+import type { SpatialQuantizeOptions } from './core/types';
 import { MARD291, MARD221 } from './palettes/mard291';
 
 export type BoardSpec = '52x52' | '78x78' | '104x104' | '78x52';
@@ -16,12 +18,12 @@ export const BOARD_PRESETS: Record<BoardSpec, { w: number; h: number; label: str
   '78x52': { w: 78, h: 52, label: '78×52（非标）' },
 };
 
-export interface AdvancedOptions {
+export interface BoardAdvancedOptions {
   /** 统一 core 预处理 k-means 选项；默认不传则关闭。 */
   colorQuantize?: ColorQuantizeOptions;
   /** @deprecated 兼容旧 UI；内部转换为 colorQuantize.colors。 */
   colors?: number;
-  /** 保边平滑，默认 'guided'（避免大图 L0-PCG 计算时间与工作区峰值） */
+  /** 保边平滑。 */
   smooth?: SmoothKind;
   /** L0 的 λ，默认 0.02；board 默认 smooth=guided，CLI 默认 smooth=l0。 */
   smoothLambda?: number;
@@ -31,14 +33,16 @@ export interface AdvancedOptions {
   smoothRadius?: number;
   /** 引导滤波正则，默认 100 */
   smoothEps?: number;
-  /** 降采样，默认 'dpid' */
+  /** 降采样。 */
   scale?: ScaleKind;
-  /** DPID 的 λ，默认 1.0（0 退化为 box） */
+  /** DPID 的 λ；0 退化为 area。 */
   dpidLambda?: number;
   /** 限色上限（不暴露限色时为 undefined），仅在同时有明确 UI 时使用 */
   maxColors?: number;
-  /** 是否抖动，默认 false */
+  /** 是否抖动，默认 false；与 clean spatial 模式互斥。 */
   dither?: boolean;
+  /** 空间优化；board 默认开启 clean profile。 */
+  spatial?: Partial<SpatialQuantizeOptions>;
   /** 是否去杂点（despeckle, 阈值<2格），默认 false */
   despeckle?: boolean;
   /** flood 去背景 CIEDE2000 阈值，默认 12 */
@@ -61,7 +65,7 @@ export interface TopLevelOptions {
   /** 主体透明裁剪，默认 true（前端不暴露） */
   cropToSubject?: boolean;
   /** 高级设置（默认折叠，置空则取内部最优默认） */
-  advanced?: AdvancedOptions;
+  advanced?: BoardAdvancedOptions;
 }
 
 export interface GenerateResult {
@@ -82,18 +86,20 @@ export function generateForBoard(img: RgbaImage, opts: TopLevelOptions): Generat
     fill: true,
     cropToSubject: opts.cropToSubject ?? true,
     palette,
-    minBeads: opts.minBeads ?? 0,
-    smooth: a?.smooth ?? 'guided',
-    smoothLambda: a?.smoothLambda ?? 0.02,
-    smoothSigma: a?.smoothSigma ?? 1,
-    smoothRadius: a?.smoothRadius ?? 8,
-    smoothEps: a?.smoothEps ?? 100,
-    scale: a?.scale ?? 'dpid',
-    dpidLambda: a?.dpidLambda ?? 1.0,
+    minBeads: opts.minBeads ?? DEFAULT_GENERATION_OPTIONS.minBeads,
+    profile: 'clean',
+    smooth: a?.smooth,
+    smoothLambda: a?.smoothLambda,
+    smoothSigma: a?.smoothSigma,
+    smoothRadius: a?.smoothRadius,
+    smoothEps: a?.smoothEps,
+    scale: a?.scale,
+    dpidLambda: a?.dpidLambda,
     maxColors: a?.maxColors,
-    dither: a?.dither ?? false,
-    despeckle: a?.despeckle ?? false,
-    backgroundTolerance: a?.backgroundTolerance ?? 12,
+    dither: a?.dither,
+    spatial: a?.spatial,
+    despeckle: a?.despeckle,
+    backgroundTolerance: a?.backgroundTolerance,
     removeBg: opts.removeBg ? 'flood' : 'none',
     colorQuantize,
   });

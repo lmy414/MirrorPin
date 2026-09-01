@@ -6,6 +6,10 @@ import {
   srgbToLab,
   ciede2000,
   srgbToLinear,
+  areaResampleToGrid,
+  dpidResampleToGrid,
+  generatePatternBead,
+  validCell,
   type GridSamples,
   type SpatialQuantizeOptions,
 } from '../src';
@@ -48,6 +52,12 @@ const baseOptions = {
 } as const;
 
 describe('top-K CIEDE2000 palette candidates', () => {
+  it('shares coverage threshold validity semantics at the exact boundary', () => {
+    const input = samples(3, 1, [[0, 0, 0], [255, 0, 0], [255, 255, 255]], [0.499, 0.5, 1]);
+    expect(validCell(input, 0)).toBe(false);
+    expect(validCell(input, 1)).toBe(true);
+    expect(validCell(input, 2)).toBe(true);
+  });
   it('returns exact pixel-major labels, costs, and best-to-second margin', () => {
     const input = samples(2, 1, [[0, 0, 0], [255, 0, 0]]);
     const result = buildPaletteCandidates(input, palette, 2);
@@ -260,6 +270,23 @@ describe('deterministic edge-sensitive Potts/ICM optimization', () => {
     hidden.linearRgb[1] = Infinity;
     hidden.linearRgb[2] = -Infinity;
     expect(() => buildPaletteCandidates(hidden, palette, 1)).not.toThrow();
+  });
+
+  it('reports honest DPID internal integration passes for area=1 and lambda modes', () => {
+    const input = { width: 1, height: 1, data: new Uint8ClampedArray([100, 100, 100, 255]) };
+    expect(areaResampleToGrid(input, 1, 1).integrationPasses).toBe(1);
+    expect(dpidResampleToGrid(input, 1, 1, { lambda: 0 }).integrationPasses).toBe(1);
+    expect(dpidResampleToGrid(input, 1, 1, { lambda: 1 }).integrationPasses).toBe(2);
+    expect(dpidResampleToGrid(input, 1, 1, { lambda: 0 })).toEqual(areaResampleToGrid(input, 1, 1));
+  });
+
+  it('uses one direct target-grid resample and describes it as direct', () => {
+    const input = { width: 3, height: 2, data: new Uint8ClampedArray(3 * 2 * 4).fill(255) };
+    for (const sizing of [{ maxSide: 2 }, { fixed: { w: 2, h: 2 }, fill: true }, { fixed: { w: 2, h: 2 }, fill: false }] as const) {
+      const phases: string[] = [];
+      generatePatternBead(input, { ...sizing, smooth: 'none', spatial: { enabled: false }, onResample: (event) => phases.push(event.phase) });
+      expect(phases).toEqual(['direct']);
+    }
   });
 
   it('uses edgeY for vertical strong-edge preservation', () => {

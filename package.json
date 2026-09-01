@@ -1,6 +1,6 @@
 {
   "name": "mirrorpin-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "拼豆图纸生成工具 · 算法内核（M1：L0/引导滤波保边 + DPID 保细节降采样）",
   "type": "module",
   "main": "dist/index.js",

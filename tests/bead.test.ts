@@ -114,7 +114,7 @@ describe('cropToSubject / generatePatternBead', () => {
   });
 
   it('fixed DPID 只执行一次目标重采样', () => {
-    const diagnostics = { resamplePasses: 0 };
+    const diagnostics: any = { resamplePasses: 0 };
     const img = makeImage(19, 13, (x, y) => [x * 11, y * 17, (x + y) * 5, 255]);
     generatePatternBead(img, {
       palette: MARD291,
@@ -125,7 +125,10 @@ describe('cropToSubject / generatePatternBead', () => {
       scale: 'dpid',
       diagnostics,
     });
-    expect(diagnostics).toEqual({ resamplePasses: 1, resampleMethod: 'dpid', sourceFloodApplied: false });
+    expect(diagnostics.resamplePasses).toBe(1);
+    expect(diagnostics.resampleMethod).toBe('dpid');
+    expect(diagnostics.sourceFloodApplied).toBe(false);
+    expect(diagnostics.actualResamplePasses).toBe(1);
   });
 
   it.each([

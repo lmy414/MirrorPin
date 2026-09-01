@@ -54,14 +54,61 @@ export interface ResolvedColorQuantizeOptions {
   alpha: Required<AlphaPolicy>;
 }
 
-/** 基础空间碎色诊断，可由后续管线继续扩充。 */
+/** Non-recursive fragmentation snapshot used by the generation pipeline. */
+export interface FragmentationSnapshot {
+  componentCount: number;
+  singletonComponentCount: number;
+  singletonRatio: number;
+  smallComponentCount: number;
+  smallComponentRatio: number;
+  smallComponentThreshold: 2;
+  boundaryCount: number;
+  adjacencyCount: number;
+  boundaryRatio: number;
+  validCellCount: number;
+}
+
+/** Pipeline diagnostics. Low-level fragmentation metrics remain compatible. */
 export interface PipelineDiagnostics {
   componentCount: number;
+  smallComponentCount: number;
+  smallComponentRatio: number;
+  smallComponentThreshold: 2;
+  validCellCount: number;
   singletonComponentCount: number;
   singletonRatio: number;
   boundaryCount: number;
   adjacencyCount: number;
   boundaryRatio: number;
+  colorCountBefore?: number;
+  colorCountAfter?: number;
+  singletonRatioBefore?: number;
+  singletonRatioAfter?: number;
+  smallComponentRatioBefore?: number;
+  smallComponentRatioAfter?: number;
+  optimizerIterations?: number;
+  energyBefore?: number;
+  energyAfter?: number;
+  optimizerEnergyBefore?: number;
+  optimizerEnergyAfter?: number;
+  cleanupEnergyBefore?: number;
+  cleanupEnergyAfter?: number;
+  colorBudgetEnergyBefore?: number;
+  colorBudgetEnergyAfter?: number;
+  totalEnergyBefore?: number;
+  totalEnergyAfter?: number;
+  actualResamplePasses?: number;
+  internalIntegrationPasses?: number;
+  operationBudget?: number;
+  cleanupOperationCount?: number;
+  colorBudgetOperationCount?: number;
+  stageOrder?: readonly string[];
+  stages?: readonly string[];
+  timings?: Readonly<Record<string, number>>;
+  fragmentationBefore?: FragmentationSnapshot;
+  fragmentationAfter?: FragmentationSnapshot;
+  labelsBefore?: readonly number[];
+  totalTimeMs?: number;
 }
 
 /** 一枚拼豆色号 */

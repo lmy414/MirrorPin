@@ -10,9 +10,27 @@ export interface PaletteEntry {
   lab: Oklab;
 }
 
+/** Validate and canonicalize swatches once before any index-bearing pipeline stage. */
+export function normalizeSwatches(palette: readonly Swatch[]): Swatch[] {
+  const result: Swatch[] = [];
+  const codes = new Set<string>();
+  for (const swatch of palette) {
+    if (!swatch || typeof swatch.code !== 'string' || swatch.code.length === 0 || typeof swatch.hex !== 'string') continue;
+    try {
+      hexToRgb(swatch.hex);
+    } catch {
+      continue;
+    }
+    if (codes.has(swatch.code)) continue;
+    codes.add(swatch.code);
+    result.push({ code: swatch.code, hex: swatch.hex.replace(/^#/, '').trim().toUpperCase() });
+  }
+  return result;
+}
+
 /** 预先构建色板（缓存 Oklab，避免每次匹配重复转换） */
 export function buildPalette(palette: readonly Swatch[]): PaletteEntry[] {
-  return palette.map((swatch) => {
+  return normalizeSwatches(palette).map((swatch) => {
     const rgb = hexToRgb(swatch.hex);
     return { swatch, rgb, lab: srgbToOklab(rgb) };
   });

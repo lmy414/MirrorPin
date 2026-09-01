@@ -227,24 +227,28 @@ export function measureSpatialFragmentation(
   const queue = new Int32Array(labels.length);
   let componentCount = 0;
   let singletonComponentCount = 0;
+  let smallComponentCount = 0;
+  let validCellCount = 0;
   let boundaryCount = 0;
   let adjacencyCount = 0;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const pixel = y * width + x;
-      if (x + 1 < width) {
+      const label = labels[pixel]!;
+      if (label < 0) continue;
+      validCellCount++;
+      if (x + 1 < width && labels[pixel + 1]! >= 0) {
         adjacencyCount++;
-        if (labels[pixel] !== labels[pixel + 1]) boundaryCount++;
+        if (label !== labels[pixel + 1]!) boundaryCount++;
       }
-      if (y + 1 < height) {
+      if (y + 1 < height && labels[pixel + width]! >= 0) {
         adjacencyCount++;
-        if (labels[pixel] !== labels[pixel + width]) boundaryCount++;
+        if (label !== labels[pixel + width]!) boundaryCount++;
       }
       if (visited[pixel]) continue;
 
       componentCount++;
-      const label = labels[pixel];
       let head = 0;
       let tail = 0;
       let size = 0;
@@ -253,14 +257,15 @@ export function measureSpatialFragmentation(
       while (head < tail) {
         const current = queue[head++]!;
         size++;
-        const cx = current % width;
-        const cy = (current - cx) / width;
-        if (cx > 0) visit(current - 1);
-        if (cx + 1 < width) visit(current + 1);
-        if (cy > 0) visit(current - width);
-        if (cy + 1 < height) visit(current + width);
+        const currentX = current % width;
+        const currentY = (current - currentX) / width;
+        if (currentX > 0) visit(current - 1);
+        if (currentX + 1 < width) visit(current + 1);
+        if (currentY > 0) visit(current - width);
+        if (currentY + 1 < height) visit(current + width);
       }
       if (size === 1) singletonComponentCount++;
+      if (size <= 2) smallComponentCount++;
 
       function visit(next: number): void {
         if (visited[next] || labels[next] !== label) return;
@@ -274,6 +279,10 @@ export function measureSpatialFragmentation(
     componentCount,
     singletonComponentCount,
     singletonRatio: componentCount > 0 ? singletonComponentCount / componentCount : 0,
+    smallComponentCount,
+    smallComponentRatio: componentCount > 0 ? smallComponentCount / componentCount : 0,
+    smallComponentThreshold: 2,
+    validCellCount,
     boundaryCount,
     adjacencyCount,
     boundaryRatio: adjacencyCount > 0 ? boundaryCount / adjacencyCount : 0,
