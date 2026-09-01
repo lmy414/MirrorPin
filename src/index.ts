@@ -9,6 +9,7 @@ export type {
   AlphaPolicy,
   ColorQuantizeOptions,
   ResolvedColorQuantizeOptions,
+  SpatialQuantizeOptions,
   PipelineDiagnostics,
   Swatch,
   Cell,
@@ -22,6 +23,8 @@ export {
   requirePositiveInteger,
   resolveAlphaPolicy,
   resolveColorQuantizeOptions,
+  DEFAULT_SPATIAL_QUANTIZE_OPTIONS,
+  resolveSpatialQuantizeOptions,
 } from './core/options';
 export { isAlphaIncluded, cleanTransparentRgb, extendTransparentRgb } from './core/alpha';
 export {
@@ -95,6 +98,8 @@ export {
   type ResampleHook,
 } from './beadpattern/core';
 export { srgbToLab, ciede2000, type Lab } from './beadpattern/ciede2000';
+export { buildPaletteCandidates, type PaletteCandidates } from './core/palette-candidates';
+export { optimizeSpatialLabels, type SpatialQuantizeResult } from './core/spatial-quantize';
 export { renderPatternImage, type RenderPatternOptions } from './render/pattern';
 export { renderPatternSvg, renderPatternPng, type RenderNodeOptions } from './render/node';
 export { countGridMaterials, type MaterialRow } from './core/materials';

@@ -2,6 +2,7 @@ import type {
   AlphaPolicy,
   ColorQuantizeOptions,
   ResolvedColorQuantizeOptions,
+  SpatialQuantizeOptions,
 } from './types';
 
 export const DEFAULT_ALPHA_POLICY: Readonly<Required<AlphaPolicy>> = Object.freeze({
@@ -11,6 +12,16 @@ export const DEFAULT_ALPHA_POLICY: Readonly<Required<AlphaPolicy>> = Object.free
 export const DEFAULT_COLOR_QUANTIZE_OPTIONS = Object.freeze({
   sampleLimit: 120000,
   seed: 42,
+});
+
+export const DEFAULT_SPATIAL_QUANTIZE_OPTIONS: Readonly<Required<SpatialQuantizeOptions>> = Object.freeze({
+  enabled: true,
+  topK: 8,
+  smoothness: 0.35,
+  edgeSigma: 0.12,
+  maxIterations: 6,
+  cleanupMaxSize: 2,
+  cleanupConfidence: 0.25,
 });
 
 export function requireInteger(name: string, value: number): number {
@@ -60,4 +71,37 @@ export function resolveColorQuantizeOptions(
     seed: requireInteger('seed', options.seed ?? DEFAULT_COLOR_QUANTIZE_OPTIONS.seed),
     alpha: resolveAlphaPolicy(options.alpha),
   };
+}
+
+export function resolveSpatialQuantizeOptions(
+  options: SpatialQuantizeOptions = {},
+): Required<SpatialQuantizeOptions> {
+  const enabled = options.enabled ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.enabled;
+  if (typeof enabled !== 'boolean') throw new Error('enabled 必须为布尔值');
+  const topK = requirePositiveInteger('topK', options.topK ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.topK);
+  const smoothness = requireFiniteNonNegative('smoothness', options.smoothness ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.smoothness);
+  const edgeSigma = requireFinitePositive('edgeSigma', options.edgeSigma ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.edgeSigma);
+  const maxIterations = requireNonNegativeInteger('maxIterations', options.maxIterations ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.maxIterations);
+  const cleanupMaxSize = requireNonNegativeInteger('cleanupMaxSize', options.cleanupMaxSize ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.cleanupMaxSize);
+  const cleanupConfidence = options.cleanupConfidence ?? DEFAULT_SPATIAL_QUANTIZE_OPTIONS.cleanupConfidence;
+  if (!Number.isFinite(cleanupConfidence) || cleanupConfidence < 0 || cleanupConfidence > 1) {
+    throw new Error('cleanupConfidence 必须为 0..1 的有限数');
+  }
+  return { enabled, topK, smoothness, edgeSigma, maxIterations, cleanupMaxSize, cleanupConfidence };
+}
+
+function requireFiniteNonNegative(name: string, value: number): number {
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${name} 必须为有限非负数`);
+  return value;
+}
+
+function requireFinitePositive(name: string, value: number): number {
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} 必须为有限正数`);
+  return value;
+}
+
+function requireNonNegativeInteger(name: string, value: number): number {
+  requireInteger(name, value);
+  if (value < 0) throw new Error(`${name} 必须为非负整数`);
+  return value;
 }

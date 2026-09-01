@@ -36,6 +36,17 @@ export interface ColorQuantizeOptions {
   alpha?: AlphaPolicy;
 }
 
+/** Spatial CIEDE2000 quantization and Potts/ICM options. */
+export interface SpatialQuantizeOptions {
+  enabled?: boolean;
+  topK?: number;
+  smoothness?: number;
+  edgeSigma?: number;
+  maxIterations?: number;
+  cleanupMaxSize?: number;
+  cleanupConfidence?: number;
+}
+
 export interface ResolvedColorQuantizeOptions {
   colors: number;
   sampleLimit: number;
