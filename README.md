@@ -2,6 +2,8 @@
 
 MirrorPin 把图片转换为可直接发布和采购的拼豆图纸：输出带色号、坐标、板界与内嵌材料清单的 PNG，并可另存 `code,hex,count` CSV。核心算法为纯 TypeScript，可在 Node.js、CLI 和浏览器 Web Worker 中运行。
 
+> **🌐 在线体验**：<https://mirrorpin.emaostudio.online/> — 浏览器本地生成，图片不上传，打开即用。
+
 ## 0.3.0 重点
 
 - **统一干净模式**：弱 Guided 平滑 + 线性光、Alpha-aware 精确面积采样 + top-K MARD CIEDE2000 候选 + 边缘敏感 Potts/ICM 空间优化。
@@ -116,6 +118,8 @@ import {
 `generatePatternBead()` 是唯一产品主管线。`src/core/pipeline.ts` 的旧多管线入口仅保留兼容，不用于 CLI、Webapp 或 minitool 默认生成。
 
 ## Webapp
+
+> 线上部署版（与仓库同版本）：**<https://mirrorpin.emaostudio.online/>**
 
 在仓库根目录运行：
 
